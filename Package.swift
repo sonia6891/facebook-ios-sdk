@@ -73,6 +73,10 @@ let package = Package(
           This will not contain interfaces for new features written in Swift.
         */
         .Prefixed.core,
+      pod 'FBSDKCoreKit', '~> 8.0.0'
+pod 'FBSDKLoginKit', '~> 8.0.0'
+pod 'FBSDKShareKit', '~> 8.0.0'
+pod 'FBSDKGamingServiceKit', '~> 8.0.0'
 
         // The main Core SDK module
         .core,
