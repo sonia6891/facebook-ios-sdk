@@ -1,1 +1,151 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>浮生千年｜歷史人生原型</title><style>:root{font-family:"Noto Serif TC","Microsoft JhengHei",serif;color:#263b38;background:#ede3cf}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 70% 0,#d9d7bc,transparent 55%),#efe7d7}header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 5%;background:#263b38;color:#f8edd7}header strong{font-size:24px;letter-spacing:5px}header small{opacity:.8}.screen{max-width:1180px;margin:28px auto;padding:24px}.paper{background:#fbf5e9ed;border:1px solid #ccb896;box-shadow:0 18px 60px #4c443224;border-radius:8px;padding:30px}h1{font-size:clamp(38px,6vw,78px);letter-spacing:8px;margin:12px 0}h2{font-size:30px;margin:8px 0 20px}p{line-height:1.9}button{font:inherit;cursor:pointer;border:1px solid #8b6948;border-radius:5px;padding:12px 22px;background:#f8f0df;color:#263b38}button.primary{background:#a84d38;color:white;border-color:#a84d38}button:hover{filter:brightness(.93)}button:disabled{opacity:.4;cursor:default}.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.space{justify-content:space-between}.muted{color:#746958}.sub{font-size:13px;letter-spacing:2px;color:#996e49}.hero{min-height:420px;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:28px}.painting{min-height:310px;position:relative;overflow:hidden;border:1px solid #c6b79a;background:linear-gradient(#c3d5d0,#e6e2c5 62%,#acb89e)}.sun{position:absolute;right:20%;top:15%;width:90px;height:90px;border-radius:50%;background:#faf1cc}.mount{position:absolute;bottom:0;width:100%;height:60%;background:#84988c;clip-path:polygon(0 100%,0 72%,21% 33%,37% 76%,60% 12%,83% 67%,100% 30%,100% 100%)}.house{position:absolute;bottom:8%;left:20%;width:55%;height:100px;background:#d5c2a3;border:4px solid #5b5546}.house:before{content:"";position:absolute;left:-10%;top:-46%;width:120%;height:55%;background:#425958;clip-path:polygon(50% 0,100% 75%,95% 100%,5% 100%,0 75%)}.house:after{content:"門";position:absolute;left:42%;bottom:0;background:#655348;color:#ecdcb8;height:65px;width:17%;text-align:center}.box{padding:18px;border:1px solid #d2c1a4;background:#f5edda;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.choice{min-height:95px;text-align:left}.choice.selected{background:#d9e3da;border-color:#234c42}.hud{display:grid;grid-template-columns:210px 1fr 230px;gap:14px}.stat{margin-bottom:12px}.meter{height:7px;background:#d9ccad;border-radius:8px;overflow:hidden}.meter i{display:block;height:100%;background:#698f80}.event{border-left:4px solid #a84d38;padding-left:15px}.hidden{display:none}footer{text-align:center;padding:25px;color:#806a51;font-size:13px}@media(max-width:830px){.hero,.hud{grid-template-columns:1fr}.screen{padding:10px}.paper{padding:18px}.grid{grid-template-columns:1fr}header strong{font-size:18px}}</style></head><body><header><strong>浮生千年</strong><small>商至民國 · 歷史人生 · 網頁試玩 V0.1</small></header><main class="screen"><section id="home" class="paper"><div class="hero"><div><div class="sub">一籤入世 · 一念千年</div><h1>浮生千年</h1><p>倘若你出生在另一個時代，你會如何度過一生？從商朝至民國，隨機投身人間，學藝、結交、成家、面對變故，也許改變歷史。</p><div class="row"><button class="primary" onclick="show('quiz')">開始人格測驗</button><button onclick="show('draw')">略過測驗 · 直接抽籤</button></div></div><div class="painting"><div class="sun"></div><div class="mount"></div><div class="house"></div></div></div></section><section id="quiz" class="paper hidden"><div class="sub">六維人格 · 簡版試玩</div><h2 id="qtitle">你的處世之道</h2><p id="qtext"></p><div id="qbuttons" class="grid"></div><p class="muted" id="qprogress"></p></section><section id="draw" class="paper hidden"><div class="sub">命運之籤</div><h2>此生，落入何時何地？</h2><p>抽取年代、家世、姓名與人生境遇。此原型採代表性史代樣本；正式版規劃涵蓋商朝至民國的全部年代。</p><button class="primary" onclick="draw()">抽取命運</button><div class="box" id="fate">命運尚未揭曉。</div><button onclick="begin()" id="begin" disabled>降生此世</button></section><section id="game" class="paper hidden"><div class="row space"><div><div class="sub" id="era">北宋</div><h2 id="place">汴京</h2><span id="years"></span></div><button onclick="show('home')">返回首頁</button></div><div class="hud"><aside class="box"><h3 id="person">人物</h3><div id="bio"></div><p class="stat">健康 <span id="health">85</span><div class="meter"><i id="hm" style="width:85%"></i></div></p><p class="stat">心境 <span id="mood">70</span><div class="meter"><i id="mm" style="width:70%"></i></div></p><p>積蓄：<b id="money">20</b></p><p>影響力：<b id="influence">0</b></p></aside><div><div class="painting" style="min-height:360px"><div class="sun"></div><div class="mount"></div><div class="house"></div></div><div class="box"><b>此刻行動</b><p id="narrative">你睜開眼，開始新的一生。</p><div class="row" id="actions"></div></div></div><aside class="box"><h3>世事</h3><p id="news">街坊傳聞與人生故事將在此出現。</p><h3>人生紀事</h3><div id="log"></div></aside></div></section><section id="ending" class="paper hidden"><div class="sub">浮生一夢 · 此生已畢</div><h2 id="deathhead">一生終章</h2><p id="deathtext"></p><div class="box" id="lastlog"></div><button class="primary" onclick="reset()">再抽一世</button></section></main><footer>歷史靈感的互動概念原型：人物與事件為示範虛構，非經完整史料考據的正式遊戲。</footer><script>const eras=[['商','殷墟','約前1200年','青銅工匠之家','貝朋'],['西周','鎬京附近','約前950年','農戶之家','禾生'],['戰國·齊','臨淄','前300年','市民之家','田安'],['秦','咸陽','前210年','工匠之家','秦生'],['西漢','長安','前100年','商戶之家','阿平'],['東漢','洛陽','120年','農戶之家','阿仁'],['三國·蜀漢','成都','230年','織戶之家','蜀安'],['北魏','洛陽','500年','手藝人之家','元禾'],['唐','長安','742年','書吏之家','阿寧'],['北宋','汴京','1105年','茶商之家','宋禾'],['南宋','臨安','1170年','船商之家','阿澄'],['金','中都','1180年','市民之家','安生'],['元','大都','1320年','商賈之家','阿遙'],['明','蘇州','1587年','布商之家','明安'],['清','杭州','1780年','工匠之家','阿玉'],['民國','上海','1933年','普通家庭','小文']];const questions=[['遇到陌生人求助時，你會？','先主動伸手','先觀察再決定'],['學習新事物，你較喜歡？','親身動手','研讀思考'],['面對衝突時，你更重視？','原則與事理','感受與關係'],['選擇生活方式，你偏好？','安穩有序','靈活變通'],['有了新主意，你傾向？','先行動試試','先籌畫完整'],['面對未知，你通常？','勇於冒險','謹慎求穩']];let answers=[],fate=null,state=null;function show(id){document.querySelectorAll('main section').forEach(x=>x.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');if(id==='quiz')qrender();scrollTo(0,0)}function qrender(){let i=answers.length;if(i===6){document.getElementById('qtitle').textContent='你的命盤已成';document.getElementById('qtext').textContent='六維人格編碼：'+answers.join('')+'。人格影響傾向，但不決定命運。';document.getElementById('qbuttons').innerHTML='<button class="primary" onclick="show(\'draw\')">前往命運抽籤</button>';document.getElementById('qprogress').textContent='簡版示範測驗，非心理診斷';return}let q=questions[i];document.getElementById('qtext').textContent=q[0];document.getElementById('qtitle').textContent='第 '+(i+1)+' 問';document.getElementById('qbuttons').innerHTML=q.slice(1).map((a,j)=>'<button class="choice" onclick="answer('+j+')">'+a+'</button>').join('');document.getElementById('qprogress').textContent=(i+1)+' / 6'}function answer(j){answers.push(j?'B':'A');qrender()}function draw(){fate=eras[Math.floor(Math.random()*eras.length)];document.getElementById('fate').innerHTML='<h2>'+fate[0]+' · '+fate[1]+'</h2><p>'+fate[2]+'｜'+fate[3]+'</p><p>你將以「'+fate[4]+'」之名降生。</p>';document.getElementById('begin').disabled=false}function begin(){if(!fate)draw();state={age:0,health:85,mood:70,money:20,influence:0,log:['出生於'+fate[0]+'的'+fate[3]],ended:false};show('game');render()}function render(){let s=state;document.getElementById('era').textContent=fate[0]+' · '+fate[2];document.getElementById('place').textContent=fate[1];document.getElementById('years').textContent='春日 · 生活場景示意';document.getElementById('person').textContent=fate[4];document.getElementById('bio').textContent=fate[3]+'｜'+s.age+' 歲';['health','mood','money','influence'].forEach(k=>document.getElementById(k).textContent=s[k]);document.getElementById('hm').style.width=Math.max(0,s.health)+'%';document.getElementById('mm').style.width=Math.max(0,s.mood)+'%';document.getElementById('log').innerHTML=s.log.slice(-5).map(x=>'<p>・'+x+'</p>').join('');document.getElementById('actions').innerHTML=[['讀書學藝',1],['做工謀生',2],['結交鄰里',3],['照顧家庭',4],['冒險嘗試',5],['平穩過一年',6]].map(x=>'<button onclick="act('+x[1]+')">'+x[0]+'</button>').join('')}function act(n){let s=state;s.age++;let events=['這一年，日子平穩，家中忙碌。','鄰里有人需要幫忙，你結下一段緣分。','市場變化，家中生計受到影響。','一場病痛讓你重新思考生活。','意外遇見一位值得學習的師傅。'];let e=events[Math.floor(Math.random()*events.length)];let labels=['','苦學技藝','勤勞謀生','認識新朋友','照料家人','勇敢嘗試','安然度日'];s.money+=n===2?8:n===5?-5:1;s.mood=Math.min(100,Math.max(10,s.mood+(n===3||n===4?5:-1)));s.influence+=(n===1||n===5)?2:0;s.health=Math.max(0,s.health-(s.age>55?4:1)-(Math.random()<.08?18:0));let line=s.age+'歲：'+labels[n]+'。'+e;s.log.push(line);document.getElementById('narrative').textContent=line;document.getElementById('news').textContent=s.influence>20?'你的技藝與名聲開始在地方傳開，或許將改變附近人的命運。':'地方人物持續生活，大小世事依序發生。';if(s.health<=0||s.age>Math.floor(65+Math.random()*30)){end();return}render()}function end(){show('ending');document.getElementById('deathhead').textContent=fate[4]+' · 享年 '+state.age+' 歲';document.getElementById('deathtext').textContent='這一世，你出生於'+fate[0]+'的'+fate[1]+'，留下影響力 '+state.influence+'。生命有長有短，每一世都值得記錄。';document.getElementById('lastlog').innerHTML=state.log.map(x=>'<p>・'+x+'</p>').join('')}function reset(){fate=null;state=null;answers=[];document.getElementById('fate').textContent='命運尚未揭曉。';document.getElementById('begin').disabled=true;show('home')}</script></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>浮生千年｜歷史人生養成</title>
+<meta name="description" content="從商朝至民國隨機投身人間：出生、學藝、工作、交友、婚姻、子女、疾病、死亡，你的一生也可能改變歷史。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- 首頁 -->
+<section id="home" class="screen">
+  <div id="homeArt" class="home-art" aria-hidden="true"></div>
+  <div class="home-card">
+    <div class="eyebrow">一籤入世 · 一念千年</div>
+    <h1>浮生千年</h1>
+    <p>倘若你生在另一個時代，會如何度過一生？從商朝到民國，命運替你抽一個年代、一個城鎮、一戶人家。學藝、謀生、交友、成家，面對疾病與戰亂，走到生命盡頭，留下一篇傳記；也許，還改變了歷史。</p>
+    <div class="home-actions">
+      <button id="btnContinue" class="btn primary hidden">繼續此生</button>
+      <button id="btnQuiz" class="btn primary">開始人格測驗</button>
+      <button id="btnSkip" class="btn">略過測驗．直接抽籤</button>
+      <button id="btnArchive" class="btn ghost">浮生錄</button>
+    </div>
+    <p class="fine">所有年代隨機降生，沒有關卡，也不須解鎖。</p>
+  </div>
+</section>
+
+<!-- 人格測驗 -->
+<section id="quiz" class="screen hidden paper-screen">
+  <div class="paper-card">
+    <div class="eyebrow" id="qProgress"></div>
+    <h2 id="qText"></h2>
+    <div id="qChoices" class="q-choices"></div>
+    <p class="fine">人格會影響傾向，不決定命運。這不是心理診斷。</p>
+  </div>
+</section>
+
+<!-- 抽籤 -->
+<section id="draw" class="screen hidden paper-screen">
+  <div class="paper-card center">
+    <div class="eyebrow">命運之籤</div>
+    <h2>此生，落入何時何地？</h2>
+    <div id="sticks" class="sticks" aria-hidden="true"></div>
+    <div id="fateBox" class="fate"></div>
+    <div class="home-actions center">
+      <button id="btnDraw" class="btn primary">搖籤</button>
+      <button id="btnBegin" class="btn primary hidden">降生此世</button>
+    </div>
+    <p class="fine">商至民國二十一個時代機率相同，時代之內的每一年也機率相同。</p>
+  </div>
+</section>
+
+<!-- 主畫面 HUD -->
+<section id="game" class="screen hidden">
+  <header class="topbar">
+    <div class="top-era">
+      <div class="seal" id="tSeal">宋</div>
+      <div>
+        <div class="top-place"><b id="tPlace"></b><span id="tEra"></span></div>
+        <div class="top-date"><span id="tYear"></span>　<span id="tGanzhi"></span></div>
+      </div>
+    </div>
+    <div class="top-stats">
+      <div class="tstat"><label>年齡</label><b id="tAge"></b></div>
+      <div class="tstat bar"><label>健康 <i id="tHp"></i></label><div class="meter hp"><span id="mHp"></span></div></div>
+      <div class="tstat bar"><label>心境 <i id="tMood"></i></label><div class="meter mood"><span id="mMood"></span></div></div>
+      <div class="tstat"><label id="tCoinLabel">積蓄</label><b id="tMoney"></b></div>
+      <div class="tstat"><label>聲望</label><b id="tFame"></b></div>
+      <div class="tstat"><label>德行</label><b id="tVirtue"></b></div>
+    </div>
+    <div class="top-season">
+      <div id="tSeason" class="season"></div>
+      <div id="tAp" class="ap" title="今年剩餘行動"></div>
+      <button id="btnMenu" class="iconbtn" aria-label="離開到首頁">返回</button>
+    </div>
+  </header>
+
+  <div class="hud">
+    <aside class="panel left" aria-label="人物">
+      <div class="who">
+        <div id="pPortrait" class="pframe"></div>
+        <div class="who-t">
+          <h3 id="pName"></h3>
+          <div id="pJob" class="job"></div>
+          <div id="pFamily" class="muted"></div>
+          <div id="pTraits" class="muted"></div>
+        </div>
+      </div>
+      <h4>技藝</h4>
+      <div id="pSkills" class="skills"></div>
+      <h4>身體</h4>
+      <div id="pIlls" class="ills"></div>
+      <h4>志業</h4>
+      <div id="pProjects" class="legacy-list"></div>
+    </aside>
+
+    <main class="stage-wrap">
+      <div id="stage" class="stage"></div>
+      <div id="floaters" class="floaters" aria-live="polite"></div>
+      <div id="narr" class="narr"></div>
+    </main>
+
+    <aside class="panel right" aria-label="世事">
+      <div class="tabs" role="tablist">
+        <button data-tab="people" class="tab on" role="tab">親友</button>
+        <button data-tab="world" class="tab" role="tab">世事</button>
+        <button data-tab="chron" class="tab" role="tab">紀事</button>
+        <button data-tab="hist" class="tab" role="tab">史冊</button>
+      </div>
+      <div id="tabBody" class="tab-body"></div>
+    </aside>
+  </div>
+
+  <footer class="actions">
+    <div id="actBar" class="act-bar"></div>
+    <button id="btnYear" class="btn-year"></button>
+  </footer>
+  <div id="actPop" class="act-pop hidden" role="menu"></div>
+</section>
+
+<!-- 結局 -->
+<section id="ending" class="screen hidden paper-screen scroll">
+  <div class="scrollcard" id="endBody"></div>
+</section>
+
+<!-- 浮生錄 -->
+<section id="archive" class="screen hidden paper-screen scroll">
+  <div class="scrollcard" id="archiveBody"></div>
+</section>
+
+<!-- 事件卡 -->
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="evTitle">
+  <div id="evCard" class="ev-card">
+    <div id="evTag" class="ev-tag"></div>
+    <h3 id="evTitle"></h3>
+    <p id="evText"></p>
+    <input id="evInput" class="ev-input hidden" maxlength="6" autocomplete="off">
+    <div id="evChoices" class="ev-choices"></div>
+  </div>
+</div>
+
+<noscript><p style="padding:24px">這個遊戲需要啟用 JavaScript。</p></noscript>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/art.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
