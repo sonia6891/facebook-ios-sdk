@@ -199,7 +199,7 @@
   }
   const tval = (v, s, c) => (typeof v === 'function' ? v(s, c) : v);
   function resolveChoices(s, def, c) {
-    return tval(def.choices, s, c).map((ch, i) => ({ i, label: ch.t, hint: ch.hint || '', off: ch.req ? !ch.req(s, c) : false, why: ch.why || '' }));
+    return tval(def.choices, s, c).map((ch, i) => ({ i, label: ch.t, hint: tval(ch.hint, s, c) || '', off: ch.req ? !ch.req(s, c) : false, why: ch.why || '', odds: ch.odds ? Math.round(clamp(ch.odds(s, c), 0, 1) * 100) : null }));
   }
   // 前一個事件可能已改變狀態，所以顯示與結算時都以當下狀態重算選項。
   function top(s) {
@@ -266,8 +266,8 @@
     // 工作
     { id: 'work', g: 'work', label: s => (s.job ? '勤於本業：' + curJob(s) : '打零工'), hint: '賺錢、累積經驗', min: 8, run: doWork },
     { id: 'seekjob', g: 'work', label: s => (s.job ? '改行轉業' : '謀一份差事'), hint: '選擇職業', min: 13, noAp: true, run: s => { pushEvent(s, 'jobChoice', {}); return null; } },
-    { id: 'exam', g: 'work', label: s => examLabel(s), hint: s => examHint(s), min: 14, avail: examAvail, run: doExam },
-    { id: 'invest', g: 'work', label: '投資買賣', hint: '可能賺也可能賠', min: 18, avail: s => (s.money < 20 ? '本錢不足 20' : ''), run: doInvest },
+    { id: 'exam', g: 'work', label: s => examLabel(s), hint: s => examHint(s), min: 14, odds: s => examOdds(s), avail: examAvail, run: doExam },
+    { id: 'invest', g: 'work', label: '投資買賣', hint: '可能賺也可能賠', min: 18, odds: s => investOdds(s), avail: s => (s.money < 20 ? '本錢不足 20' : ''), run: doInvest },
     { id: 'estate', gate: true, g: 'work', label: '置辦產業', hint: '買田、開鋪、置宅，年年有進項', min: 18, noAp: true, run: s => { pushEvent(s, 'estateChoice', {}); return null; } },
     { id: 'project', gate: true, g: 'world', label: '興辦地方事業', hint: '修橋、義學、義倉等', min: 22, noAp: true, run: s => { pushEvent(s, 'projectChoice', {}); return null; } },
 
@@ -310,7 +310,8 @@
       if (!reason && (!free || a.gate) && s.ap <= 0) reason = '今年的時光已用盡';
       const sta = free ? 0 : staCost(a);
       if (!reason && sta > (s.sta == null ? 100 : s.sta)) reason = `體力不足（需 ${sta}）`;
-      return { id: a.id, g: a.g, label: tval(a.label, s), hint: tval(a.hint, s), off: !!reason, why: reason, sta };
+      const odds = a.odds ? a.odds(s) : null;
+      return { id: a.id, g: a.g, label: tval(a.label, s), hint: tval(a.hint, s), off: !!reason, why: reason, sta, odds: odds == null ? null : Math.round(clamp(odds, 0, 1) * 100) };
     });
   }
   function doAction(s, id) {
@@ -436,9 +437,12 @@
     if (chance(s, p)) return enter({ noble: '得權貴賞識，你終於躋身士大夫之列。', merit: '你憑軍功受爵，得了一官半職。', chaju: '郡守舉你為孝廉，徵召入仕。', jiupin: '中正官評定了你的品第，得以入仕。', modern: '你通過考試，取得公職。', none: '你由吏入官，終於有了品秩。' }[sys]);
     return say(s, pick(s, ['門路未通，空候了一季。', '對方敷衍了幾句，便請你回去。']), { mood: -5, money: -2 });
   }
+  const investOdds = s => clamp(.42 + s.skills.shang / 170 + s.world.rich / 700 - eraAt(s.year).turb * .15, .2, .85);
+  // 科舉的成功率可以事先算出；其他選官制度看的是出身與舉薦，不顯示
+  const examOdds = s => (examSystem(s.year) === 'keju' && s.exam < 3 ? clamp((s.skills.wen - [20, 42, 62][s.exam]) / 28 + .22, .03, .88) : null);
   function doInvest(s) {
     const stake = Math.round(Math.max(20, s.money * .35));
-    const p = clamp(.42 + s.skills.shang / 170 + s.world.rich / 700 - eraAt(s.year).turb * .15, .2, .85);
+    const p = investOdds(s);
     if (chance(s, p)) {
       const gain = Math.round(stake * (.25 + rnd(s) * .9));
       return say(s, pick(s, ['你押對了時機，貨到價漲。', '一批貨順利出手，賺了一筆。']), { money: gain, shang: 2, mood: 4 });
@@ -740,7 +744,7 @@
       ['聲望', Math.round(Math.min(200, s.fame))],
       ['德行', Math.round(Math.max(0, s.virtue) * .6)],
       ['家業', Math.round(Math.min(120, Math.max(0, s.money) / 5) + (s.assets || []).length * 8)],
-      ['家人', children(s).length * 8 + (s.npcs.some(n => ['spouse', 'late'].includes(n.rel)) ? 10 : 0)],
+      ['家人', children(s).length * 8 + (s.grand || 0) * 5 + (s.npcs.some(n => ['spouse', 'late'].includes(n.rel)) ? 10 : 0)],
       ['志向', (s.amb ? s.amb.stage : 0) * 40],
       ['才能', (s.perks || []).length * 6],
       ['著作與事業', s.works.length * 15 + s.projects.filter(p => p.done).length * 15 + s.breakthroughs.length * 30],
@@ -834,7 +838,64 @@
   } });
 
   // 通用生活事件
+
+  /* ---------- 人與人之間：配偶、子女、父母、手足、朋友的來回 ---------- */
+  const up = (n, v) => { n.aff = clamp(n.aff + v, 0, 100); };
+  const siblings = s => s.npcs.filter(n => n.rel === 'sibling' && n.alive);
+  const TALENT = { wen: '過目成誦', wu: '身手矯健', gong: '手巧心細', shang: '算帳飛快' };
+  E('spouseQuarrel', { kind: 'family', title: '夫妻之間', text: (s, c) => `為了${pick(s, ['家裡的開銷', '孩子的管教', '親戚間的往來', '你總是晚歸'])}，你和${npc(s, c.id).name}吵了起來。`, choices: (s, c) => [
+    { t: '先低頭認錯', hint: '情誼回升', fx: st => { const n = npc(st, c.id); up(n, 9); remember(st, n, '吵架時你先低了頭'); return say(st, `你先軟了口氣，${n.name}的氣也消了大半。`, { mood: -1 }); } },
+    { t: '把道理說清楚', hint: '說得通感情更好，說不通更僵', odds: st => clamp(.38 + st.traits.charm / 180, .25, .85), fx: st => { const n = npc(st, c.id); if (chance(st, clamp(.38 + st.traits.charm / 180, .25, .85))) { up(n, 6); remember(st, n, '那次把話說開了'); return say(st, '你們把話攤開來說，反倒更懂彼此了。', { mood: 5 }); } up(n, -11); remember(st, n, '那次吵得很兇'); return say(st, '越說越僵，兩人背對背睡了好幾夜。', { mood: -6 }); } },
+    { t: '摔門出去', hint: '情誼下降', fx: st => { const n = npc(st, c.id); up(n, -7); remember(st, n, '你一句話不說就走了'); return say(st, '你在外頭晃到天黑才回家，屋裡一片安靜。', { mood: -3 }); } }
+  ] });
+  E('spouseDream', { kind: 'family', title: '枕邊人的心願', text: (s, c) => `${npc(s, c.id).name}說，想${pick(s, ['盤下街角的小鋪子', '學一門新手藝', '跟人合夥跑一趟貨'])}，問你的意思。`, choices: (s, c) => [
+    { t: '拿錢支持', hint: '花費 20，成了全家受益', req: st => st.money >= 20, why: '手頭不足 20', odds: st => clamp(.4 + st.skills.shang / 220 + npc(st, c.id).aff / 400, .25, .9), fx: st => { const n = npc(st, c.id); const p = clamp(.4 + st.skills.shang / 220 + n.aff / 400, .25, .9); remember(st, n, '你拿出積蓄支持他的心願'); if (chance(st, p)) { up(n, 12); return say(st, `${n.name}把事情做起來了，家裡多了一份進項。`, { money: 25, mood: 6 }, 'major'); } up(n, 6); return say(st, `事情沒做成，錢也折了，可${n.name}說：「你肯信我，就夠了。」`, { money: -20, mood: -2 }); } },
+    { t: '勸再想想', hint: '穩當，但對方會失望', fx: st => { const n = npc(st, c.id); up(n, -5); remember(st, n, '那個心願被你勸退了'); return say(st, `${n.name}沒再提起，只是那陣子話少了些。`, null); } }
+  ] });
+  E('childTalent', { kind: 'family', title: '孩子的天分', text: (s, c) => `你發現${npc(s, c.id).name}${TALENT[c.k]}，似乎是塊${SKILLS[c.k]}的料。`, choices: (s, c) => [
+    { t: '延請名師', hint: '花費 25，孩子大有長進', req: st => st.money >= 25, why: '手頭不足 25', fx: st => { const k = npc(st, c.id); k.edu = clamp((k.edu || 0) + 16, 0, 100); k.gift = c.k; up(k, 5); remember(st, k, '小時候爹娘為我請了名師'); return say(st, `你為${k.name}請來名師，孩子一日千里。`, { money: -25, mood: 4 }); } },
+    { t: '親自教導', hint: s2 => `需${SKILLS[c.k]} 25`, req: st => st.skills[c.k] >= 25, why: `自己的${SKILLS[c.k]}還不到 25`, fx: st => { const k = npc(st, c.id); k.edu = clamp((k.edu || 0) + 9, 0, 100); k.gift = c.k; up(k, 10); remember(st, k, '這身本事是爹娘親手教的'); return say(st, `你把自己會的一樣樣教給${k.name}。`, { mood: 6, [c.k]: 1 }); } },
+    { t: '順其自然', hint: '不花心力', fx: st => say(st, '孩子自有孩子的路，你沒有多加干涉。', null) }
+  ] });
+  E('childMarriage', { kind: 'family', title: '兒女婚事', text: (s, c) => `${npc(s, c.id).name}到了成家的年紀，${pick(s, ['心裡似乎有了人', '媒人已經上門好幾回', '街坊都來打聽'])}。`, choices: (s, c) => [
+    { t: '依孩子的心意', hint: '親情大增', fx: st => { const k = npc(st, c.id); k.married = true; up(k, 14); remember(st, k, '婚事爹娘讓我自己作主'); return say(st, `${k.name}和意中人成了親，小倆口和和美美。`, { mood: 8, money: -8 }, 'major'); } },
+    { t: '挑門當戶對的', hint: '聲望與家業得利，孩子未必情願', fx: st => { const k = npc(st, c.id); k.married = true; up(k, -9); remember(st, k, '婚事是爹娘作的主'); return say(st, `你為${k.name}訂下一門體面的親事。`, { fame: 4, money: 6 }, 'major'); } },
+    { t: '再等兩年', hint: '暫不決定', fx: st => say(st, '你說不急，再看看。', null) }
+  ] });
+  E('grandchild', { kind: 'family', title: '含飴弄孫', text: (s, c) => `${npc(s, c.id).name}家裡添了個${pick(s, ['胖小子', '小閨女'])}，一家人都往你這裡報喜。`, choices: (s, c) => [
+    { t: '抱抱孫兒', hint: '心境大好', fx: st => { const k = npc(st, c.id); k.kid = true; st.grand = (st.grand || 0) + 1; up(k, 6); return say(st, '你抱著那團軟乎乎的小東西，笑得合不攏嘴。', { mood: 14 }, 'major'); } },
+    { t: '備一份厚禮', hint: '花費 12，親情更深', req: st => st.money >= 12, why: '手頭不足 12', fx: st => { const k = npc(st, c.id); k.kid = true; st.grand = (st.grand || 0) + 1; up(k, 12); remember(st, k, '孩子出生時爹娘送了厚禮'); return say(st, '你打了一副長命鎖，親手掛在孫兒頸上。', { mood: 10, money: -12 }, 'major'); } }
+  ] });
+  E('parentIll', { kind: 'family', title: '高堂有恙', text: (s, c) => `${npc(s, c.id).label}${npc(s, c.id).name}年事已高，這陣子${pick(s, ['咳得厲害', '下不了床', '飯也吃不下'])}。`, choices: (s, c) => [
+    { t: '親自侍奉湯藥', hint: '費心費力，德行與親情', fx: st => { const n = npc(st, c.id); up(n, 16); if (n.deathYear != null) n.deathYear += 2; remember(st, n, '病中是你日夜守著'); return say(st, `你衣不解帶地守了一個多月，${n.name}總算緩了過來。`, { virtue: 6, hp: -3, mood: 2 }); } },
+    { t: '花錢延請良醫', hint: '花費 20', req: st => st.money >= 20, why: '手頭不足 20', fx: st => { const n = npc(st, c.id); up(n, 7); if (n.deathYear != null) n.deathYear += 1; remember(st, n, '病中你請了好大夫'); return say(st, '你請來城裡最好的大夫，藥錢流水似的花出去。', { money: -20, virtue: 2 }); } },
+    { t: '託給兄弟姊妹', hint: '省事，但心裡有愧', req: st => siblings(st).length > 0, why: '沒有手足可託', fx: st => { const n = npc(st, c.id); up(n, -8); remember(st, n, '病中沒見你回來幾次'); return say(st, '你把事情交給了手足，自己忙著別的。', { virtue: -3, mood: -3 }); } }
+  ] });
+  E('siblingDispute', { kind: 'family', title: '分家', text: (s, c) => `雙親都不在了，${npc(s, c.id).label}${npc(s, c.id).name}提起家裡那點產業該怎麼分。`, choices: (s, c) => [
+    { t: '多讓一些', hint: '少拿一點，手足情深', fx: st => { const n = npc(st, c.id); st.flags.divided = true; up(n, 18); remember(st, n, '分家時你讓了我'); return say(st, '你說一家人不計較，自己只拿了該拿的一小份。', { virtue: 5, money: 6, mood: 3 }); } },
+    { t: '寸土必爭', hint: '可能多得，也可能鬧僵還吃虧', odds: st => clamp(.4 + st.traits.nerve / 200, .25, .8), fx: st => { const n = npc(st, c.id); st.flags.divided = true; up(n, -26); remember(st, n, '分家時你一寸都不肯讓'); if (chance(st, clamp(.4 + st.traits.nerve / 200, .25, .8))) return say(st, '你據理力爭，拿到了大半，可兄弟姊妹從此少了往來。', { money: 32, virtue: -3 }); return say(st, '鬧到族裡都知道了，東西沒多拿到，臉面倒丟了。', { money: 4, fame: -3, mood: -6 }); } },
+    { t: '請族老公斷', hint: '公平，不傷和氣', fx: st => { const n = npc(st, c.id); st.flags.divided = true; up(n, 3); return say(st, '族老拿出戥子，一樣樣分得清清楚楚。', { money: 16 }); } }
+  ] });
+  E('friendVenture', { title: '合夥的邀約', text: (s, c) => `${npc(s, c.id).name}興沖沖地來找你，說有一樁${pick(s, ['販運藥材', '合開作坊', '囤貨待價'])}的買賣，問你要不要入一股。`, choices: (s, c) => [
+    { t: '入股 30', hint: '看交情與眼光', req: st => st.money >= 30, why: '手頭不足 30', odds: st => clamp(.35 + npc(st, c.id).aff / 260 + st.skills.shang / 240, .2, .88), fx: st => { const n = npc(st, c.id); const p = clamp(.35 + n.aff / 260 + st.skills.shang / 240, .2, .88); if (chance(st, p)) { up(n, 9); remember(st, n, '那年我們合夥賺了一筆'); return say(st, `買賣成了，你和${n.name}對半分了紅利。`, { money: 42, shang: 2, mood: 6 }, 'major'); } up(n, -4); remember(st, n, '那年害你賠了錢，他一直過意不去'); n.owes = true; return say(st, `貨砸在手裡，本錢賠了個乾淨。${n.name}說這筆帳他記著。`, { money: -30, shang: 1, mood: -5 }); } },
+    { t: '只幫忙不入股', hint: '情誼小增', fx: st => { const n = npc(st, c.id); up(n, 4); return say(st, `你替${n.name}跑了幾趟腿，沒有出本錢。`, { shang: 1 }); } },
+    { t: '婉拒', hint: '不冒險', fx: st => { const n = npc(st, c.id); up(n, -3); return say(st, '你說手頭不寬裕，把話岔開了。', null); } }
+  ] });
+  E('oldFriend', { title: '故人來訪', text: (s, c) => `多年的老友${npc(s, c.id).name}提著酒上門，說是路過，特地來看你。`, choices: (s, c) => [
+    { t: '把酒話當年', hint: '心境大好', fx: st => { const n = npc(st, c.id); up(n, 6); remember(st, n, '那晚我們喝到天亮'); return say(st, '兩人從少年時說到眼前，酒喝乾了，話還沒說完。', { mood: 12, hp: -1 }); } },
+    { t: '託他引薦門路', hint: '聲望與機會', fx: st => { const n = npc(st, c.id); up(n, -2); if (st.job) st.job.xp += 25; return say(st, `${n.name}拍胸脯說包在他身上，果然替你說了幾句好話。`, { fame: 4 }); } }
+  ] });
+
   const LIFE = [
+    { id: 'spouseQuarrel', w: .7, cond: s => !!spouse(s) },
+    { id: 'spouseDream', w: .7, cond: s => !!spouse(s) && s.age >= 22 && s.age <= 58 },
+    { id: 'childTalent', w: 1.1, cond: s => children(s, true).some(c => c.age >= 8 && c.age <= 14 && !c.gift) },
+    { id: 'childMarriage', w: 1.3, cond: s => children(s, true).some(c => c.age >= 17 && c.age <= 30 && !c.married) },
+    { id: 'grandchild', w: 1.4, cond: s => children(s, true).some(c => c.married && c.age >= 19 && !c.kid) },
+    { id: 'parentIll', w: 1.1, cond: s => s.age >= 20 && parents(s).some(p => p.age >= 55) },
+    { id: 'siblingDispute', w: 1.2, cond: s => s.age >= 22 && !s.flags.divided && !parents(s).length && s.npcs.some(n => n.rel === 'sibling' && n.alive) },
+    { id: 'friendVenture', w: .4, cond: s => s.age >= 20 && friends(s).length > 0 },
+    { id: 'oldFriend', w: .6, cond: s => s.age >= 35 && friends(s).some(f => f.aff >= 60) },
     { id: 'matchVisit', w: 2, cond: s => !spouse(s) && s.age >= minMarry(s) && s.age <= 40, push: s => pushEvent(s, 'matchChoice', { cands: makeCandidates(s) }) },
     { id: 'loveMatch', w: .6, cond: s => !spouse(s) && s.age >= minMarry(s) && s.age < 35 && friends(s).some(f => f.sex !== s.sex && f.age >= minMarry(s) - 1) },
     { id: 'friendNeed', w: 1.5, cond: s => friends(s).length > 0 && s.age >= 12 },
@@ -900,7 +961,7 @@
     { t: '不蹚渾水', fx: s => say(s, '你推說有事，沒有去。', { mood: -1 }) }
   ] });
   E('promoteChance', { title: '機緣', text: s => `有位貴人注意到你在「${curJob(s)}」上的表現，要交一樁大差事給你。`, choices: () => [
-    { t: '接下差事', hint: '成敗看本事', req: s => !!s.job, why: '你已不在其位', fx: s => { const j = JOBS[s.job.id]; const sk = s.skills[j.skill]; if (chance(s, clamp(.3 + sk / 130, .3, .92))) { s.job.xp += 55; const r = say(s, '你把事情辦得漂亮極了，貴人大為賞識。', { fame: 8, money: 12, mood: 8, [j.skill]: 3 }); tryPromote(s, r); return r; } return say(s, '差事搞砸了，還要你賠一些損失。', { money: -8, mood: -8, fame: -2 }); } },
+    { t: '接下差事', hint: '成敗看本事', req: s => !!s.job, why: '你已不在其位', odds: s => (s.job ? clamp(.3 + s.skills[JOBS[s.job.id].skill] / 130, .3, .92) : 0), fx: s => { const j = JOBS[s.job.id]; const sk = s.skills[j.skill]; if (chance(s, clamp(.3 + sk / 130, .3, .92))) { s.job.xp += 55; const r = say(s, '你把事情辦得漂亮極了，貴人大為賞識。', { fame: 8, money: 12, mood: 8, [j.skill]: 3 }); tryPromote(s, r); return r; } return say(s, '差事搞砸了，還要你賠一些損失。', { money: -8, mood: -8, fame: -2 }); } },
     { t: '婉拒', hint: '求穩', fx: s => say(s, '你覺得還是腳踏實地的好。', { mood: 1 }) }
   ] });
   E('lostChild', { title: '路邊小事', text: '你在街上看見一個走失的孩子，哭得上氣不接下氣。', choices: () => [
@@ -922,6 +983,14 @@
     { t: '遠走他鄉', hint: '放棄一切', fx: s => { s.job = null; s.disguise = false; s.flags.entered = false; return say(s, '你連夜離開，把過往的身分都留在了身後。', { money: -5, mood: -12 }, 'major'); } }
   ] });
   function ctxFor(s, id) {
+    if (id === 'spouseQuarrel' || id === 'spouseDream') return { id: spouse(s).id };
+    if (id === 'childTalent') return { id: pick(s, children(s, true).filter(c => c.age >= 8 && c.age <= 14 && !c.gift)).id, k: pick(s, ['wen', 'wu', 'gong', 'shang']) };
+    if (id === 'childMarriage') return { id: pick(s, children(s, true).filter(c => c.age >= 17 && c.age <= 30 && !c.married)).id };
+    if (id === 'grandchild') return { id: pick(s, children(s, true).filter(c => c.married && c.age >= 19 && !c.kid)).id };
+    if (id === 'parentIll') return { id: pick(s, parents(s).filter(p => p.age >= 55)).id };
+    if (id === 'siblingDispute') return { id: pick(s, s.npcs.filter(n => n.rel === 'sibling' && n.alive)).id };
+    if (id === 'friendVenture') return { id: pick(s, friends(s)).id };
+    if (id === 'oldFriend') return { id: pick(s, friends(s).filter(f => f.aff >= 60)).id };
     if (id === 'loveMatch') return { id: pick(s, friends(s).filter(f => f.sex !== s.sex && f.age >= minMarry(s) - 1)).id };
     if (id === 'friendNeed') return { id: pick(s, friends(s)).id };
     if (id === 'rival') { const sx = chance(s, .75) ? 'm' : 'f'; return { name: makeName(s, eraAt(s.year), sx), sex: sx }; }
