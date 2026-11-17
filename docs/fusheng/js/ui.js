@@ -196,8 +196,9 @@
     $('skills').innerHTML = Object.keys(D.SKILLS).map(k => `<div class="sk"><i>${SK_ICON[k]}</i><span>${D.SKILLS[k]}</span><b>${Math.round(s.skills[k])}</b></div>`).join('');
     const close = s.npcs.filter(n => n.alive && !n.gone && ['parent', 'spouse', 'child', 'mentor', 'friend', 'sibling'].includes(n.rel))
       .sort((a, b) => relOrder(a) - relOrder(b) || b.aff - a.aff).slice(0, 3);
-    $('rels').innerHTML = close.length ? close.map(n => `<div class="rel"><img src="${L.npc(s, n, true)}" alt=""><span>${esc(n.label || '')}</span><b>${esc(n.name)}</b><em>親密 ${Math.round(n.aff)}</em></div>`).join('') : '<p class="muted">身邊暫時無人。</p>';
+    $('rels').innerHTML = close.length ? close.map(n => `<div class="rel" data-npc="${n.id}" role="button" tabindex="0"><img src="${L.npc(s, n, true)}" alt=""><span>${esc(n.label || '')}</span><b>${esc(n.name)}</b><em>親密 ${Math.round(n.aff)}</em></div>`).join('') : '<p class="muted">身邊暫時無人。</p>';
   }
+  document.getElementById('rels').addEventListener('click', e => { const r = e.target.closest('[data-npc]'); if (r) openPerson(r.dataset.npc); });
   const relOrder = n => ({ spouse: 0, parent: 1, child: 2, mentor: 3, sibling: 4, friend: 5 }[n.rel] ?? 9);
   function hints() {
     const out = [];
@@ -234,8 +235,9 @@
     // 主角與身邊的人
     const comp = companion();
     $('actors').innerHTML = `<img class="actor me" src="${L.player(s)}" alt="${esc(s.name)}" style="--h:${heightOf(s.age)}">` +
-      (comp ? `<img class="actor npc" src="${L.npc(s, comp)}" alt="${esc(comp.name)}" title="${esc((comp.label || '') + ' ' + comp.name)}" style="--h:${heightOf(comp.age)}">` : '');
+      (comp ? `<img class="actor npc known" data-npc="${comp.id}" src="${L.npc(s, comp)}" alt="${esc(comp.name)}" title="${esc((comp.label || '') + ' ' + comp.name)}" style="--h:${heightOf(comp.age)}">` : '');
     $('crowd').innerHTML = crowdOf(comp);
+    showBubble();
     $('stage').dataset.loc = ['town', 'street', 'lane', 'market'].includes(s.loc) ? 'out' : 'in';
     renderFx();
   }
@@ -253,7 +255,7 @@
   };
   function crowdOf(comp) {
     const set = L.setOf(s.year), seed = [...(s.city + s.loc)].reduce((n, c) => n + c.charCodeAt(0), Math.abs(s.year));
-    const known = rels => s.npcs.filter(n => n.alive && !n.gone && rels.includes(n.rel) && n !== comp).map(n => ({ src: L.npc(s, n), age: n.age, title: `${n.label || ''} ${n.name}` }));
+    const known = rels => s.npcs.filter(n => n.alive && !n.gone && rels.includes(n.rel) && n !== comp).map(n => ({ src: L.npc(s, n), age: n.age, title: `${n.label || ''} ${n.name}`, id: n.id }));
     const ev = who => ({ src: L.evActor(s, who), age: 30 });
     const anyone = i => { const sex = (seed + i) % 2 ? 'm' : 'f', age = [24, 44, 62, 12, 34][(seed + i * 3) % 5], cls = ['poor', 'middle', 'poor', 'gentry'][(seed + i) % 4]; return { src: L.sprite(set, cls, sex, age), age }; };
     let list;
@@ -271,7 +273,7 @@
     const slots = SLOTS[s.loc] || [];
     return list.filter(x => x.src).slice(0, slots.length).map((x, i) => {
       const [left, bottom, size] = slots[i];
-      return `<img class="bystander" src="${x.src}" alt="" ${x.title ? `title="${esc(x.title)}"` : ''} style="left:${left}%;bottom:${bottom}vh;--h:${(size * Number(heightOf(x.age))).toFixed(2)};--d:${(i * .7).toFixed(1)}s">`;
+      return `<img class="bystander ${x.id ? 'known' : ''}" src="${x.src}" alt="" ${x.id ? `data-npc="${x.id}"` : ''} ${x.title ? `title="${esc(x.title)}"` : ''} style="left:${left}%;bottom:${bottom}vh;--h:${(size * Number(heightOf(x.age))).toFixed(2)};--d:${(i * .7).toFixed(1)}s">`;
     }).join('');
   }
   // 四季：春落花、夏螢火、秋落葉、冬飄雪
@@ -368,24 +370,27 @@
     };
   });
   $('relMore').onclick = () => openSheet('family');
+  $('stage').addEventListener('click', e => { const p = e.target.closest('img[data-npc]'); if (p) openPerson(p.dataset.npc); });
 
   /* ---------- 面板 ---------- */
-  const TITLES = { act: '生活排程', map: '地圖', char: '人物養成', family: '家庭與親友', bag: '行囊', world: '世事', bio: '傳記', sys: '系統' };
+  const TITLES = { person: '', act: '生活排程', map: '地圖', char: '人物養成', family: '家庭與親友', bag: '行囊', world: '世事', bio: '傳記', sys: '系統' };
   function openSheet(k) { sheet = k; picked = null; $('sheet').classList.remove('hidden'); renderSheet(); renderNav(); }
   function closeSheet() { sheet = null; $('sheet').classList.add('hidden'); if (s) renderNav(); }
   $('sheetClose').onclick = closeSheet;
   $('sheet').addEventListener('click', e => { if (e.target === $('sheet')) closeSheet(); });
 
   function renderSheet() {
-    $('sheetTitle').textContent = TITLES[sheet];
+    $('sheetTitle').textContent = sheet === 'person' ? ((G.npc(s, personId) || {}).label || '') + ' ' + ((G.npc(s, personId) || {}).name || '') : TITLES[sheet];
     const body = $('sheetBody');
     body.className = 'sheet-body k-' + sheet;
-    body.innerHTML = ({ act: actHtml, map: mapHtml, char: charHtml, family: familyHtml, bag: bagHtml, world: worldHtml, bio: bioHtml, sys: sysHtml }[sheet])();
+    body.innerHTML = ({ person: personHtml, act: actHtml, map: mapHtml, char: charHtml, family: familyHtml, bag: bagHtml, world: worldHtml, bio: bioHtml, sys: sysHtml }[sheet])();
     bindSheet(body);
   }
   function bindSheet(body) {
     body.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { actTab = b.dataset.tab; picked = null; renderSheet(); }; });
     body.querySelectorAll('[data-pick]').forEach(b => { b.onclick = () => { picked = b.dataset.pick; renderSheet(); }; });
+    body.querySelectorAll('[data-npc]').forEach(b => { b.onclick = () => openPerson(b.dataset.npc); });
+    body.querySelectorAll('[data-pact]').forEach(b => { b.onclick = () => doPerson(b.dataset.pact); });
     const go = body.querySelector('#doAct');
     if (go) go.onclick = () => { const id = picked; closeSheet(); act(id); };
     body.querySelectorAll('[data-go]').forEach(b => { b.onclick = () => { closeSheet(); goPlace(b.dataset.go, false); }; });
@@ -481,11 +486,77 @@
       .sort((x, y) => (x.at - s.skills[x.k]) - (y.at - s.skills[y.k])).slice(0, 3);
     return `<div class="perks">${have.map(p => `<span class="perk on" title="${esc(p.d)}">${esc(p.n)}<small>${esc(p.d)}</small></span>`).join('')}${next.map(p => `<span class="perk" title="${esc(p.d)}">${esc(p.n)}<small>${D.SKILLS[p.k]} ${Math.round(s.skills[p.k])}／${p.at}</small></span>`).join('')}</div>`;
   }
+
+  /* ---------- 找人：點任何一位在世的親友，就能決定跟他做什麼 ---------- */
+  let personId = null, personSay = null;
+  function openPerson(id) {
+    const n = G.npc(s, Number(id));
+    if (!n || !n.alive || n.gone) return;
+    personId = n.id; personSay = null;
+    openSheet('person');
+  }
+  function personHtml() {
+    const n = G.npc(s, personId);
+    if (!n || !n.alive || n.gone) return '<p class="muted">這個人已經不在身邊了。</p>';
+    const acts = G.peopleActs(s, n.id);
+    const line = personSay ? personSay.line : G.greet(s, n.id);
+    const mem = (n.mem || []).slice().reverse();
+    return `<div class="person">
+      <div class="person-fig"><div class="say">${esc(line)}</div><img src="${L.npc(s, n)}" alt=""></div>
+      <div class="person-info">
+        <div class="kv2"><label>關係</label><span>${esc(n.label || '')}</span><label>年齡</label><span>${n.age} 歲</span>${n.jobName ? `<label>營生</label><span>${esc(n.jobName)}</span>` : ''}${n.trait ? `<label>性情</label><span>${esc(n.trait)}</span>` : ''}</div>
+        <div class="bond"><span>親密</span><div class="bar aff"><span style="width:${pct(n.aff)}%"></span></div><b>${Math.round(n.aff)}</b><em>${esc(G.bondName(n))}</em></div>
+        ${personSay ? `<div class="person-res">${esc(personSay.text)}${deltaHtml(personSay.deltas)}${personSay.aff ? `<span class="delta ${personSay.aff > 0 ? 'up' : 'down'}">親密${personSay.aff > 0 ? '+' : ''}${personSay.aff}</span>` : ''}</div>` : ''}
+        <h5>可以做的事</h5>
+        <div class="pacts">${acts.map(a => `<button class="arow" data-pact="${a.id}" ${a.off ? 'disabled' : ''}><b>${esc(a.label)}${a.odds != null && !a.off ? oddsTag(a.odds) : ''}</b><small>${esc(a.off ? a.why : a.hint)}</small><em>${a.ap ? '行動 -1' : ''}</em></button>`).join('')}</div>
+        <p class="muted" style="margin-top:6px">今年剩餘行動 ${s.ap}／${s.apMax}</p>
+        <h5>${esc(n.name)}記得的事</h5>
+        ${mem.length ? mem.map(m => `<div class="lg"><em>${m.age} 歲</em>${esc(m.t)}</div>`).join('') : '<p class="muted">你們之間還沒有特別的回憶。多走動，就會有的。</p>'}
+      </div>
+    </div>`;
+  }
+  function doPerson(actId) {
+    const res = G.interact(s, personId, actId);
+    if (!res) return;
+    personSay = res;
+    setNarr(res.text, res.deltas);
+    AU.play(res.aff < 0 ? 'bad' : res.aff >= 9 ? 'good' : 'act');
+    store.set(SAVE, s);
+    if (!s.alive) { finishLife(); return; }
+    checkAch(s, false);
+    showCheer();
+    renderAll();
+    pumpEvents();
+  }
+  // 場景裡認識的人會開口說一句話
+  let bubbleT;
+  function showBubble() {
+    clearTimeout(bubbleT);
+    const old = $('stage').querySelector('.bubble');
+    if (old) old.remove();
+    const who = [...$('stage').querySelectorAll('[data-npc]')];
+    if (!who.length || !$('modal').classList.contains('hidden')) return;
+    const el = who[(s.year + s.ap + who.length) % who.length];
+    const text = G.greet(s, Number(el.dataset.npc));
+    if (!text) return;
+    bubbleT = setTimeout(() => {
+      const box = $('stage').getBoundingClientRect(), r = el.getBoundingClientRect();
+      if (!r.width) return;
+      const b = document.createElement('button');
+      b.className = 'bubble';
+      b.textContent = text;
+      b.style.left = (r.left + r.width / 2 - box.left) + 'px';
+      b.style.top = (r.top - box.top - 6) + 'px';
+      b.onclick = () => openPerson(el.dataset.npc);
+      $('stage').appendChild(b);
+      bubbleT = setTimeout(() => b.remove(), 6500);
+    }, 500);
+  }
   function familyHtml() {
-    const row = n => `<div class="pp ${n.alive ? '' : 'gone'}"><img src="${L.npc(s, n, true)}" alt=""><div><b>${esc(n.label || '')} ${esc(n.name)}</b><small>${n.age} 歲${n.jobName ? '．' + esc(n.jobName) : ''}${n.blurb ? '．' + esc(n.blurb) : ''}${n.trait ? '．性情' + esc(n.trait) : ''}${(n.mem || []).length ? `<br><i class="mem">記得：${n.mem.slice(-2).map(m => esc(m.t)).join('；')}</i>` : ''}</small></div><span class="aff">${n.alive ? '親密 ' + Math.round(n.aff) : (n.gone ? n.note || '離去' : '已故')}</span></div>`;
+    const row = n => `<div class="pp ${n.alive ? '' : 'gone'}" ${n.alive && !n.gone ? `data-npc="${n.id}" role="button" tabindex="0"` : ''}><img src="${L.npc(s, n, true)}" alt=""><div><b>${esc(n.label || '')} ${esc(n.name)}</b><small>${n.age} 歲${n.jobName ? '．' + esc(n.jobName) : ''}${n.blurb ? '．' + esc(n.blurb) : ''}${n.trait ? '．性情' + esc(n.trait) : ''}${(n.mem || []).length ? `<br><i class="mem">記得：${n.mem.slice(-2).map(m => esc(m.t)).join('；')}</i>` : ''}</small></div><span class="aff">${n.alive ? '親密 ' + Math.round(n.aff) : (n.gone ? n.note || '離去' : '已故')}</span></div>`;
     const sec = (title, list) => (list.length ? `<div class="sect">${title}</div>${list.map(row).join('')}` : '');
     const by = rels => s.npcs.filter(n => rels.includes(n.rel));
-    return (sec('婚姻', by(['spouse', 'late', 'ex'])) + sec('子女', by(['child'])) + sec('父母手足', by(['parent', 'sibling'])) + sec('師友', by(['mentor', 'friend', 'figure'])) + sec('對手', by(['rival']))) || '<p class="muted">身邊暫時無人。</p>';
+    return '<p class="muted">點任何一位在世的親友，可以去找他。</p>' + (sec('婚姻', by(['spouse', 'late', 'ex'])) + sec('子女', by(['child'])) + sec('父母手足', by(['parent', 'sibling'])) + sec('師友', by(['mentor', 'friend', 'figure'])) + sec('對手', by(['rival']))) || '<p class="muted">身邊暫時無人。</p>';
   }
   function bagHtml() {
     const inv = (s.inv || []).map(i => (typeof i === 'string' ? i : i.n)).filter(Boolean);

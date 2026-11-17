@@ -886,6 +886,100 @@
     { t: '託他引薦門路', hint: '聲望與機會', fx: st => { const n = npc(st, c.id); up(n, -2); if (st.job) st.job.xp += 25; return say(st, `${n.name}拍胸脯說包在他身上，果然替你說了幾句好話。`, { fame: 4 }); } }
   ] });
 
+  /* ---------- 主動找人：每個在世的親友都可以去找，做什麼由你決定 ---------- */
+  const TIERS = [[85, '莫逆'], [70, '知己'], [50, '親近'], [25, '尋常'], [0, '疏遠']];
+  const tierOf = n => TIERS.find(t => n.aff >= t[0])[1];
+  const kinTier = n => (n.aff >= 85 ? '至親' : n.aff >= 70 ? '深厚' : n.aff >= 50 ? '和睦' : n.aff >= 25 ? '平淡' : '生分');
+  const isKin = n => ['parent', 'spouse', 'child', 'sibling'].includes(n.rel);
+  const bondName = n => (isKin(n) ? kinTier(n) : tierOf(n));
+  const npcSkill = n => n.kind || (n.job && JOBS[n.job] ? JOBS[n.job].skill : null);
+  const met = (s, n, key) => n['y_' + key] === s.year; // 這件事今年做過了沒
+  const mark = (s, n, key) => { n['y_' + key] = s.year; };
+
+  // 對方開口說的話：看關係、親疏、性情，以及他記得你的事
+  function lineOf(s, n, mood) {
+    const last = (n.mem || []).slice(-1)[0];
+    const pool = [];
+    if (mood === 'gift') pool.push('這怎麼好意思……你有心了。', '你還記得我喜歡這個。', '下回別破費了，人來就好。');
+    else if (mood === 'help') pool.push('多虧有你，不然我真不知道怎麼辦。', '這份情我記下了。', '患難見真情，我沒看錯人。');
+    else if (mood === 'cold') pool.push('……有事嗎？', '你倒是難得想起我。', '嗯。');
+    else {
+      if (last && chance(s, .45)) pool.push(`還記得嗎？${last.t}。我一直放在心上。`);
+      if (n.rel === 'parent') pool.push(s.age < 16 ? '天冷了，多穿一件。' : '在外頭別太累，身子要緊。', '你小時候啊，可皮了。', '吃過了沒？灶上還溫著湯。', n.age >= 60 ? '人老了，就盼著你們平平安安。' : '家裡的事不用你操心。');
+      else if (n.rel === 'spouse') pool.push('今天過得怎麼樣？', '家裡有我，你放心。', n.aff >= 70 ? '這輩子能跟你過，我知足了。' : '你最近話少了。', '等孩子大了，我們出去走走吧。');
+      else if (n.rel === 'child') pool.push(n.age < 10 ? '爹娘！你看我撿到什麼！' : n.age < 18 ? '我自己的事，我自己會想。' : '您別老惦記我，我過得很好。', n.age < 12 ? '再陪我玩一會兒嘛。' : '我也想像您一樣有本事。');
+      else if (n.rel === 'sibling') pool.push('咱們多久沒坐下來說話了？', '小時候搶東西吃的事，你還記得吧。', '有難處就說，一家人。');
+      else if (n.rel === 'mentor') pool.push('學問不在多，在熟。', '你近來有長進，但還不夠沉得住氣。', '為師當年也走過這條路。');
+      else if (n.rel === 'rival') pool.push('別以為我會讓著你。', '哼，走著瞧。', n.aff >= 40 ? '說起來，也只有你配當我的對手。' : '又是你。');
+      else pool.push('好久不見，進來坐！', `${s.city}最近可熱鬧了，你聽說沒有？`, n.aff >= 70 ? '有你這個朋友，是我的福氣。' : '改日一起喝一杯。', '最近忙些什麼？');
+      if (n.trait === '爽朗') pool.push('哈哈，來來來，別客氣！');
+      if (n.trait === '寡言') pool.push('……嗯，坐。');
+      if (n.trait === '好強') pool.push('我可不想輸給別人。');
+    }
+    return pick(s, pool);
+  }
+
+  const P_ACTS = [
+    { id: 'talk', label: '閒話家常', hint: '不花行動，每人每年一次', ok: () => true, once: true,
+      run: (s, n) => { up(n, isKin(n) ? 3 : 4); return { text: `你和${n.name}聊了好一會兒。`, e: { mood: 3 }, line: lineOf(s, n, n.aff < 25 ? 'cold' : '') }; } },
+    { id: 'gift', label: s => `送一份禮（${giftCost(s)} ${coin(s)}）`, hint: '親密大增，每人每年一次', ok: (s, n) => n.rel !== 'rival' || n.aff >= 30, once: true, cost: s => giftCost(s),
+      run: (s, n) => { const c = giftCost(s); up(n, 9 + Math.min(6, c / 4)); remember(s, n, `你送過${pick(s, ['一匹好布', '一盒點心', '一件小玩意', '一罈好酒', '一支筆'])}`); return { text: `你挑了份禮物帶給${n.name}。`, e: { money: -c, mood: 2 }, line: lineOf(s, n, 'gift') }; } },
+    { id: 'help', label: '幫他一個忙', hint: '花一次行動；德行與親密', ok: (s, n) => s.age >= 10, ap: true,
+      run: (s, n) => { up(n, 11); n.owes = true; remember(s, n, `${pick(s, ['搬家', '收成', '修屋', '跑腿', '照看孩子'])}那回是你來幫的忙`); return { text: `你放下手邊的事，替${n.name}忙了好幾天。`, e: { virtue: 3, hp: -1 }, line: lineOf(s, n, 'help') }; } },
+    { id: 'outing', label: (s, n) => (n.rel === 'child' && n.age < 12 ? '陪孩子玩' : '一同出遊'), hint: '花一次行動；兩人心情都好', ok: (s, n) => ['spouse', 'child', 'friend', 'sibling', 'parent'].includes(n.rel) && s.age >= 8, ap: true,
+      run: (s, n) => { up(n, 10); if (n.rel === 'child') n.edu = clamp((n.edu || 0) + 2, 0, 100); remember(s, n, `一起去${pick(s, ['看燈會', '逛廟會', '城外踏青', '河邊釣魚', '登高望遠'])}的那天`); return { text: `你和${n.name}出門走了一趟，難得這樣清閒。`, e: { mood: 9, money: s.age >= 15 ? -2 : 0 }, line: pick(s, ['今天真好。', '下回還要一起來。', '好久沒這麼開心了。']) }; } },
+    { id: 'learn', label: (s, n) => `向他請益${SKILLS[npcSkill(n)] || ''}`, hint: '花一次行動；學到多少看交情', ok: (s, n) => !!npcSkill(n) && n.rel !== 'child' && n.age >= 16 && s.age >= 8, ap: true, odds: (s, n) => clamp(.35 + n.aff / 160, .3, .95),
+      run: (s, n) => { const k = npcSkill(n); if (chance(s, clamp(.35 + n.aff / 160, .3, .95))) { up(n, 4); return { text: `${n.name}傾囊相授，你受益良多。`, e: { [k]: 4 + (n.rel === 'mentor' ? 2 : 0), mood: 2 }, line: pick(s, ['這一手我只教你。', '看仔細了，訣竅在這裡。', '你學得快，我也高興。']) }; } return { text: `${n.name}今日沒什麼興致，只隨口點撥了幾句。`, e: { [k]: 1 }, line: pick(s, ['改天吧，今天乏了。', '這個嘛……你自己多琢磨。']) }; } },
+    { id: 'borrow', label: s => `開口借錢（20 ${coin(s)}）`, hint: '交情夠深才借得到；會欠下人情', ok: (s, n) => n.rel !== 'child' && n.rel !== 'rival' && s.age >= 15 && !n.lent, odds: (s, n) => clamp((n.aff - 35) / 55, .05, .95),
+      run: (s, n) => { if (chance(s, clamp((n.aff - 35) / 55, .05, .95))) { n.lent = true; up(n, -4); remember(s, n, '你手頭緊時跟我借過錢'); return { text: `${n.name}二話不說，把錢塞到你手裡。`, e: { money: 20 }, line: pick(s, ['拿去用，不急著還。', '誰沒有個難處？']) }; } up(n, -6); return { text: `${n.name}面有難色，推說手頭也不寬裕。`, e: { mood: -3 }, line: lineOf(s, n, 'cold') }; } },
+    { id: 'repay', label: s => `還錢（24 ${coin(s)}）`, hint: '連本帶謝意還清', ok: (s, n) => !!n.lent, cost: () => 24,
+      run: (s, n) => { n.lent = false; up(n, 10); remember(s, n, '借的錢你一分不少地還了'); return { text: `你把錢連同一點謝禮還給了${n.name}。`, e: { money: -24, virtue: 2 }, line: pick(s, ['你這人，信得過。', '我早忘了這回事呢。']) }; } },
+    { id: 'sworn', label: '義結金蘭', hint: '親密 85 以上；從此禍福與共', ok: (s, n) => n.rel === 'friend' && !n.sworn && s.age >= 14, need: (s, n) => (n.aff >= 85 ? '' : '交情還不夠（需親密 85）'),
+      run: (s, n) => { n.sworn = true; n.label = n.sex === 'm' ? (n.age >= s.age ? '義兄' : '義弟') : (n.age >= s.age ? '義姊' : '義妹'); n.aff = 100; remember(s, n, '那天我們焚香結拜'); return { text: `你與${n.name}焚香為誓，結為異姓手足。`, e: { mood: 15, fame: 3 }, kind: 'major', line: '不求同年同月同日生，但求有福同享、有難同當。' }; } },
+    { id: 'court', label: '表明心意', hint: '親密 65 以上；也許成就一段姻緣', ok: (s, n) => n.rel === 'friend' && n.sex !== s.sex && !spouse(s) && s.age >= minMarry(s) && n.age >= minMarry(s) - 1, need: (s, n) => (n.aff >= 65 ? '' : '還不夠熟（需親密 65）'),
+      run: (s, n) => { pushEvent(s, 'loveMatch', { id: n.id }); return { text: `你鼓起勇氣，把心裡的話對${n.name}說了。`, e: null, line: '……其實，我也等這句話很久了。' }; } },
+    { id: 'peace', label: '登門和解', hint: '花一次行動；化敵為友', ok: (s, n) => n.rel === 'rival', ap: true, odds: (s, n) => clamp(.25 + s.traits.charm / 160 + n.aff / 200, .15, .9),
+      run: (s, n) => { if (chance(s, clamp(.25 + s.traits.charm / 160 + n.aff / 200, .15, .9))) { n.rel = 'friend'; n.label = '友人'; n.aff = Math.max(n.aff, 45); remember(s, n, '當年是你先伸出手，我們才成了朋友'); return { text: `一席話說開，你和${n.name}竟成了朋友。`, e: { mood: 8, virtue: 3, fame: 2 }, kind: 'major', line: '鬥了這些年，倒不如坐下來喝一杯。' }; } up(n, 4); return { text: `${n.name}冷著臉送客，不過神色似乎鬆動了些。`, e: { mood: -2 }, line: '少來這套。' }; } },
+    { id: 'duel', label: '一較高下', hint: '花一次行動；贏了揚名', ok: (s, n) => n.rel === 'rival' && s.age >= 14, ap: true, odds: s => clamp(.3 + bestSkill(s) / 150, .2, .9),
+      run: (s, n) => { if (chance(s, clamp(.3 + bestSkill(s) / 150, .2, .9))) { up(n, -5); return { text: `你當眾勝過了${n.name}，滿場喝采。`, e: { fame: 6, mood: 6 }, line: '……這回算你贏。' }; } return { text: `你輸給了${n.name}，面上無光。`, e: { fame: -2, mood: -5 }, line: '就這點本事？' }; } }
+  ];
+  const giftCost = s => (s.money >= 200 ? 15 : s.money >= 60 ? 8 : 4);
+  function peopleActs(s, id) {
+    const n = npc(s, id);
+    if (!n || !n.alive || n.gone || !s.alive) return [];
+    return P_ACTS.filter(a => a.ok(s, n)).map(a => {
+      let why = '';
+      const cost = a.cost ? a.cost(s) : 0;
+      if (s.pending.length) why = '先把眼前的事處理完';
+      else if (a.once && met(s, n, a.id)) why = '今年已經做過了';
+      else if (a.need && a.need(s, n)) why = a.need(s, n);
+      else if (cost > 0 && cost > s.money) why = `手頭不足 ${cost}`;
+      else if (a.ap && s.ap <= 0) why = '今年的時光已用盡';
+      else if (a.ap && (s.sta == null ? 100 : s.sta) < 8) why = '體力不足（需 8）';
+      return { id: a.id, label: tval(a.label, s, n), hint: a.hint, off: !!why, why, ap: !!a.ap, odds: a.odds ? Math.round(a.odds(s, n) * 100) : null };
+    });
+  }
+  function interact(s, id, actId) {
+    const n = npc(s, id);
+    const item = peopleActs(s, id).find(x => x.id === actId);
+    const a = P_ACTS.find(x => x.id === actId);
+    if (!n || !item || item.off) return null;
+    if (a.ap) { spend(s); s.sta = Math.max(0, (s.sta == null ? staMax(s) : s.sta) - 8); }
+    if (a.once) mark(s, n, a.id);
+    const before = n.aff;
+    const r = a.run(s, n);
+    const res = say(s, r.text, r.e, r.kind);
+    afterChange(s);
+    return { text: res.text, deltas: res.deltas, line: r.line, aff: Math.round(n.aff - before), bond: bondName(n) };
+  }
+  // 場景裡的人隨口說的一句話（不改變任何數值）
+  function greet(s, id) {
+    const n = npc(s, id);
+    if (!n || !n.alive) return '';
+    const keep = s.rng; const line = lineOf(s, n, n.aff < 25 ? 'cold' : ''); s.rng = keep; // 招呼語不消耗亂數，存讀檔後劇情不變
+    return line;
+  }
+
   const LIFE = [
     { id: 'spouseQuarrel', w: .7, cond: s => !!spouse(s) },
     { id: 'spouseDream', w: .7, cond: s => !!spouse(s) && s.age >= 22 && s.age <= 58 },
@@ -1397,7 +1491,7 @@
     return lines.join('\n');
   }
 
-  const api = { AMBITIONS, PERKS, ambition, perksOf, lifeScore, remember, persona, heirs, continueAs, goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
+  const api = { peopleActs, interact, greet, bondName, AMBITIONS, PERKS, ambition, perksOf, lifeScore, remember, persona, heirs, continueAs, goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.FS_ENGINE = api;
 })(typeof window !== 'undefined' ? window : globalThis);
