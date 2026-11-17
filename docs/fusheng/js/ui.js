@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   const G = window.FS_ENGINE, D = window.FS_DATA, L = window.FS_LOOK;
+  const AU = window.FS_AUDIO || { play() {}, set() {}, get() { return false; } };
+  const oddsTag = v => (v == null ? '' : `<span class="odds ${v >= 65 ? 'hi' : v >= 40 ? 'mid' : 'lo'}">成功率 ${v}%</span>`);
   const $ = id => document.getElementById(id);
   const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const SAVE = 'fusheng.save.v2', ARCHIVE = 'fusheng.archive.v2', ACHKEY = 'fusheng.ach.v1';
@@ -58,6 +60,7 @@
     if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
     el.innerHTML = `<b>${esc(item[0])}</b><small>${esc(item[1] || '')}</small>`;
     el.classList.add('on');
+    AU.play('good');
     clearTimeout(toastT);
     toastT = setTimeout(() => { el.classList.remove('on'); setTimeout(nextToast, 380); }, toastQ.length ? 1900 : 3200);
   }
@@ -327,10 +330,12 @@
   function act(id) {
     s.loc = ACTION_LOC[id] || (s.job ? JOB_LOC[s.job.id] : 'market') || s.loc;
     const res = G.doAction(s, id);
-    if (res) setNarr(res.text, res.deltas);
+    if (res) { setNarr(res.text, res.deltas); AU.play(mood(res.deltas)); }
     picked = null;
     afterStep();
   }
+  // 依數值變化挑音效：錢或健康掉得多就是壞消息
+  const mood = ds => { const sum = (ds || []).reduce((n, d) => n + (d.v > 0 ? 1 : -1) * Math.min(3, Math.abs(d.v) / 4 + 1), 0); return sum < -1 ? 'bad' : sum > 2 ? 'good' : 'act'; };
   function afterStep() {
     store.set(SAVE, s);
     if (!s.alive) { finishLife(); return; }
@@ -342,6 +347,7 @@
   function passYear() {
     if (s.pending.length) { pumpEvents(); return; }
     closeSheet();
+    AU.play('year');
     const before = s.log.length;
     G.endYear(s);
     const fresh = s.log.slice(before).filter(l => l.k !== 'life');
@@ -400,6 +406,9 @@
         s = d; store.set(SAVE, s); closeSheet(); enterGame();
       }).catch(() => { body.querySelector('#sysMsg').textContent = '這個檔案不是可用的存檔。'; });
     };
+    const mu = body.querySelector('#sysMusic'), sf = body.querySelector('#sysSfx');
+    if (mu) mu.onclick = () => { AU.set('music', !AU.get('music')); renderSheet(); };
+    if (sf) sf.onclick = () => { AU.set('sfx', !AU.get('sfx')); AU.play('tap'); renderSheet(); };
     const fu = body.querySelector('#sysFull');
     if (fu) fu.onclick = () => desk.fullscreen();
     const exit = body.querySelector('#sysExit');
@@ -426,8 +435,8 @@
       <div class="paper-col">
         <h5>可安排的活動</h5>
         <div class="gtabs">${GROUPS.map(g => `<button data-tab="${g.id}" class="${g.id === actTab ? 'on' : ''}">${g.n}</button>`).join('')}</div>
-        <div class="acts">${list.map(a => `<button class="arow ${a.id === picked ? 'on' : ''}" data-pick="${a.id}" ${a.off ? 'disabled' : ''}><b>${esc(a.label)}</b><small>${esc(a.off ? a.why : a.hint)}</small><em>${a.sta ? '體力 -' + a.sta : a.id === 'rest' ? '體力 +30' : ''}</em></button>`).join('')}</div>
-        <div class="preview">${cur ? `<h6>預估效果</h6><p>${esc(cur.hint)}．用去一次行動${cur.sta ? `、體力 ${cur.sta}` : ''}</p><button id="doAct" class="btn primary">安排此事</button>` : '<p class="muted">選一件事，看看預估效果。</p>'}</div>
+        <div class="acts">${list.map(a => `<button class="arow ${a.id === picked ? 'on' : ''}" data-pick="${a.id}" ${a.off ? 'disabled' : ''}><b>${esc(a.label)}</b><small>${esc(a.off ? a.why : a.hint)}</small><em>${a.odds != null && !a.off ? oddsTag(a.odds) : ''}${a.sta ? '體力 -' + a.sta : a.id === 'rest' ? '體力 +30' : ''}</em></button>`).join('')}</div>
+        <div class="preview">${cur ? `<h6>預估效果</h6><p>${esc(cur.hint)}．用去一次行動${cur.sta ? `、體力 ${cur.sta}` : ''}${cur.odds != null ? '．' + oddsTag(cur.odds) : ''}</p><button id="doAct" class="btn primary">安排此事</button>` : '<p class="muted">選一件事，看看預估效果。</p>'}</div>
       </div>
     </div>`;
   }
@@ -510,7 +519,7 @@
     return `<p class="muted">此生紀事，最近的在上。</p>` + s.log.slice(-60).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
   }
   function sysHtml() {
-    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
+    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysMusic" class="btn">音樂：${AU.get('music') ? '開' : '關'}</button><button id="sysSfx" class="btn">音效：${AU.get('sfx') ? '開' : '關'}</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
       <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
   }
 
@@ -529,6 +538,7 @@
     const ev = G.top(s);
     if (!ev) { $('modal').classList.add('hidden'); return; }
     closeSheet();
+    if ($('modal').classList.contains('hidden')) AU.play('event');
     $('modal').classList.remove('hidden');
     const card = $('evCard');
     card.className = 'ev-card ' + (ev.kind || 'life');
@@ -549,7 +559,7 @@
     ev.choices.forEach(c => {
       const b = document.createElement('button');
       b.className = 'choice'; b.disabled = c.off;
-      b.innerHTML = `<b>${esc(c.label)}</b>${c.off && c.why ? `<small>${esc(c.why)}</small>` : c.hint ? `<small>${esc(c.hint)}</small>` : ''}`;
+      b.innerHTML = `<b>${esc(c.label)}${c.odds != null && !c.off ? oddsTag(c.odds) : ''}</b>${c.off && c.why ? `<small>${esc(c.why)}</small>` : c.hint ? `<small>${esc(c.hint)}</small>` : ''}`;
       b.onclick = () => choose(c.i);
       box.appendChild(b);
     });
@@ -564,6 +574,7 @@
     store.set(SAVE, s);
     renderAll();
     if (res.text) {
+      AU.play(s.alive ? mood(res.deltas) : 'end');
       $('evTag').textContent = '後來';
       if (!s.alive) $('evTitle').textContent = '命數已盡';
       $('evText').innerHTML = esc(res.text) + '<br>' + deltaHtml(res.deltas);
@@ -583,6 +594,7 @@
 
   /* ---------- 結局 ---------- */
   function finishLife() {
+    AU.play('end');
     $('modal').classList.add('hidden');
     closeSheet();
     store.del(SAVE);
@@ -694,5 +706,7 @@
   }
 
   addEventListener('keydown', e => { if (e.key === 'Escape' && sheet) closeSheet(); });
+  // 所有按鈕都有輕輕一聲
+  document.addEventListener('click', e => { if (e.target.closest('button')) AU.play('tap'); }, true);
   home();
 })();
