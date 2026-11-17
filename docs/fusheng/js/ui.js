@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const G = window.FS_ENGINE, D = window.FS_DATA, L = window.FS_LOOK;
-  const AU = window.FS_AUDIO || { play() {}, set() {}, get() { return false; } };
+  const AU = window.FS_AUDIO || { play() {}, set() {}, get() { return false; }, ambience() {}, nextMode() { return ''; }, modeName() { return ''; } };
   const oddsTag = v => (v == null ? '' : `<span class="odds ${v >= 65 ? 'hi' : v >= 40 ? 'mid' : 'lo'}">成功率 ${v}%</span>`);
   const $ = id => document.getElementById(id);
   const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -60,7 +60,7 @@
     if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
     el.innerHTML = `<b>${esc(item[0])}</b><small>${esc(item[1] || '')}</small>`;
     el.classList.add('on');
-    AU.play('good');
+    AU.play('cheer');
     clearTimeout(toastT);
     toastT = setTimeout(() => { el.classList.remove('on'); setTimeout(nextToast, 380); }, toastQ.length ? 1900 : 3200);
   }
@@ -142,6 +142,7 @@
     if (!fate) return;
     s = G.newLife(fate);
     s.loc = 'home';
+    AU.play('birth');
     enterGame();
   };
 
@@ -237,6 +238,8 @@
     $('actors').innerHTML = `<img class="actor me" src="${L.player(s)}" alt="${esc(s.name)}" style="--h:${heightOf(s.age)}">` +
       (comp ? `<img class="actor npc known" data-npc="${comp.id}" src="${L.npc(s, comp)}" alt="${esc(comp.name)}" title="${esc((comp.label || '') + ' ' + comp.name)}" style="--h:${heightOf(comp.age)}">` : '');
     $('crowd').innerHTML = crowdOf(comp);
+    const wet = /雨/.test(G.calendar(s).weather);
+    AU.ambience(wet ? 'amb_rain' : ['town', 'street', 'lane'].includes(s.loc) ? 'amb_city' : s.loc === 'market' ? 'amb_market' : 'amb_room');
     showBubble();
     $('stage').dataset.loc = ['town', 'street', 'lane', 'market'].includes(s.loc) ? 'out' : 'in';
     renderFx();
@@ -300,6 +303,7 @@
     return null;
   }
   function goPlace(loc, openActs) {
+    if (loc !== s.loc) AU.play(loc === 'town' ? 'steps' : 'door');
     s.loc = loc;
     renderStage();
     store.set(SAVE, s);
@@ -337,7 +341,7 @@
     afterStep();
   }
   // 依數值變化挑音效：錢或健康掉得多就是壞消息
-  const mood = ds => { const sum = (ds || []).reduce((n, d) => n + (d.v > 0 ? 1 : -1) * Math.min(3, Math.abs(d.v) / 4 + 1), 0); return sum < -1 ? 'bad' : sum > 2 ? 'good' : 'act'; };
+  const mood = ds => { const sum = (ds || []).reduce((n, d) => n + (d.v > 0 ? 1 : -1) * Math.min(3, Math.abs(d.v) / 4 + 1), 0); const coin = (ds || []).find(d => d.k === '積蓄' && d.v >= 5); return sum < -4 ? 'worse' : sum < -1 ? 'bad' : coin ? 'coin' : sum > 2 ? 'good' : 'act'; };
   function afterStep() {
     store.set(SAVE, s);
     if (!s.alive) { finishLife(); return; }
@@ -374,7 +378,7 @@
 
   /* ---------- 面板 ---------- */
   const TITLES = { person: '', act: '生活排程', map: '地圖', char: '人物養成', family: '家庭與親友', bag: '行囊', world: '世事', bio: '傳記', sys: '系統' };
-  function openSheet(k) { sheet = k; picked = null; $('sheet').classList.remove('hidden'); renderSheet(); renderNav(); }
+  function openSheet(k) { if (sheet !== k) AU.play('page'); sheet = k; picked = null; $('sheet').classList.remove('hidden'); renderSheet(); renderNav(); }
   function closeSheet() { sheet = null; $('sheet').classList.add('hidden'); if (s) renderNav(); }
   $('sheetClose').onclick = closeSheet;
   $('sheet').addEventListener('click', e => { if (e.target === $('sheet')) closeSheet(); });
@@ -414,6 +418,9 @@
     const mu = body.querySelector('#sysMusic'), sf = body.querySelector('#sysSfx');
     if (mu) mu.onclick = () => { AU.set('music', !AU.get('music')); renderSheet(); };
     if (sf) sf.onclick = () => { AU.set('sfx', !AU.get('sfx')); AU.play('tap'); renderSheet(); };
+    const md = body.querySelector('#sysMode'), am = body.querySelector('#sysAmb');
+    if (md) md.onclick = () => { AU.nextMode(); renderSheet(); };
+    if (am) am.onclick = () => { AU.set('amb', !AU.get('amb')); renderSheet(); };
     const fu = body.querySelector('#sysFull');
     if (fu) fu.onclick = () => desk.fullscreen();
     const exit = body.querySelector('#sysExit');
@@ -520,7 +527,7 @@
     if (!res) return;
     personSay = res;
     setNarr(res.text, res.deltas);
-    AU.play(res.aff < 0 ? 'bad' : res.aff >= 9 ? 'good' : 'act');
+    AU.play(res.aff < 0 ? 'bad' : actId === 'talk' ? 'tea' : actId === 'outing' ? 'steps' : actId === 'gift' || actId === 'repay' || actId === 'borrow' ? 'coin' : actId === 'sworn' || actId === 'peace' ? 'joy' : res.aff >= 9 ? 'good' : 'act');
     store.set(SAVE, s);
     if (!s.alive) { finishLife(); return; }
     checkAch(s, false);
@@ -590,8 +597,8 @@
     return `<p class="muted">此生紀事，最近的在上。</p>` + s.log.slice(-60).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
   }
   function sysHtml() {
-    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysMusic" class="btn">音樂：${AU.get('music') ? '開' : '關'}</button><button id="sysSfx" class="btn">音效：${AU.get('sfx') ? '開' : '關'}</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
-      <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
+    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysMusic" class="btn">音樂：${AU.get('music') ? '開' : '關'}</button><button id="sysMode" class="btn">配樂：${esc(AU.modeName())}</button><button id="sysSfx" class="btn">音效：${AU.get('sfx') ? '開' : '關'}</button><button id="sysAmb" class="btn">環境聲：${AU.get('amb') ? '開' : '關'}</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
+      <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。音效、環境聲與「城鎮曲」「靜謐曲」取自《古人有嘻哈》專案。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
   }
 
   /* ---------- 事件卡 ---------- */
@@ -609,7 +616,7 @@
     const ev = G.top(s);
     if (!ev) { $('modal').classList.add('hidden'); return; }
     closeSheet();
-    if ($('modal').classList.contains('hidden')) AU.play('event');
+    if ($('modal').classList.contains('hidden')) AU.play('paper');
     $('modal').classList.remove('hidden');
     const card = $('evCard');
     card.className = 'ev-card ' + (ev.kind || 'life');
@@ -710,6 +717,7 @@
       </div>
       <p class="fine">人物與個人遭遇為遊戲虛構；歷史事件取材自史實，上古年份為約數，「偏移」內容屬假想。</p>`;
     bioButtons(G.bioText(life), life.name);
+    setTimeout(() => AU.play('bell'), 1800);
     $('btnAgain').onclick = () => { answers = []; openDraw(); };
     $('btnHome').onclick = home;
     document.querySelectorAll('[data-heir]').forEach(b => {
