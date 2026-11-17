@@ -1,0 +1,22 @@
+// 上傳到 Steam 用的設定範本。把 APPID、DEPOTID 換成 Steamworks 後台給的編號（Depot 通常是 App ID + 1）。
+// 用法：steamcmd +login <帳號> +run_app_build <這個檔案的完整路徑> +quit
+"AppBuild"
+{
+	"AppID" "APPID"
+	"Desc" "浮生千年 0.3.0"
+	"ContentRoot" "..\dist\FushengMillennia-win32-x64"
+	"BuildOutput" "..\dist\steam_output"
+	"Depots"
+	{
+		"DEPOTID"
+		{
+			"FileMapping"
+			{
+				"LocalPath" "*"
+				"DepotPath" "."
+				"recursive" "1"
+			}
+			"FileExclusion" "steam_appid.txt"
+		}
+	}
+}
