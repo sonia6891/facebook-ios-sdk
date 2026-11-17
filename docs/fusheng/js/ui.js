@@ -47,14 +47,25 @@
     });
     if (fresh) store.set(ACHKEY, got);
   }
-  let toastT;
-  function toast(title, sub) {
+  let toastT, toastBusy = false;
+  const toastQ = [];
+  function toast(title, sub) { toastQ.push([title, sub]); if (!toastBusy) nextToast(); }
+  function nextToast() {
+    const item = toastQ.shift();
+    if (!item) { toastBusy = false; return; }
+    toastBusy = true;
     let el = $('toast');
     if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
-    el.innerHTML = `<b>${esc(title)}</b><small>${esc(sub || '')}</small>`;
+    el.innerHTML = `<b>${esc(item[0])}</b><small>${esc(item[1] || '')}</small>`;
     el.classList.add('on');
     clearTimeout(toastT);
-    toastT = setTimeout(() => el.classList.remove('on'), 3600);
+    toastT = setTimeout(() => { el.classList.remove('on'); setTimeout(nextToast, 380); }, toastQ.length ? 1900 : 3200);
+  }
+  // 志向與才能的喜訊：引擎記在 s.cheer，畫面播完就清掉
+  function showCheer() {
+    if (!s || !s.cheer || !s.cheer.length) return;
+    s.cheer.forEach(c => toast(c.t, c.d));
+    s.cheer = [];
   }
 
   let answers = [], fate = null, s = null, sheet = null, actTab = 'study', picked = null;
@@ -298,7 +309,20 @@
   function deltaHtml(ds) {
     return (ds || []).map(d => `<span class="delta ${d.v > 0 ? 'up' : 'down'}">${esc(d.k)}${d.v > 0 ? '+' : ''}${d.v}</span>`).join('');
   }
-  function setNarr(text, ds) { $('narr').innerHTML = `${esc(text)}${deltaHtml(ds)}`; }
+  function setNarr(text, ds) { $('narr').innerHTML = `${esc(text)}${deltaHtml(ds)}`; floatDeltas(ds); }
+  function floatDeltas(ds) {
+    const box = $('floats');
+    if (!box || !ds || !ds.length) return;
+    ds.slice(0, 5).forEach((d, i) => {
+      const el = document.createElement('span');
+      el.className = 'float ' + (d.v > 0 ? 'up' : 'down');
+      el.textContent = `${d.k} ${d.v > 0 ? '+' : ''}${d.v}`;
+      el.style.setProperty('--i', i);
+      el.style.setProperty('--x', ((i % 2 ? 1 : -1) * (30 + i * 16)) + 'px');
+      box.appendChild(el);
+      setTimeout(() => el.remove(), 2300);
+    });
+  }
 
   function act(id) {
     s.loc = ACTION_LOC[id] || (s.job ? JOB_LOC[s.job.id] : 'market') || s.loc;
@@ -311,6 +335,7 @@
     store.set(SAVE, s);
     if (!s.alive) { finishLife(); return; }
     checkAch(s, false);
+    showCheer();
     renderAll();
     pumpEvents();
   }
@@ -426,13 +451,26 @@
         <h5>身體</h5><p>${s.ills.length ? s.ills.map(i => esc(i.n) + (i.chronic ? '（宿疾）' : '')).join('、') : '目前無病無痛'}</p>
       </div>
       <div class="grow-side">
-        <h5>核心能力</h5>${Object.keys(D.SKILLS).map(k => `<div class="sbar"><span>${D.SKILLS[k]}</span><div class="bar sk"><span style="width:${pct(s.skills[k])}%"></span></div><b>${Math.round(s.skills[k])}</b></div>`).join('')}
+        <h5>核心能力</h5>${Object.keys(D.SKILLS).map(k => `<div class="sbar"><span>${D.SKILLS[k]}</span><div class="bar skl"><span style="width:${pct(s.skills[k])}%"></span></div><b>${Math.round(s.skills[k])}</b></div>`).join('')}
         <h5>人生階段</h5>
         <div class="stages">${L.STAGES.map(([id, n]) => `<div class="${id === st ? 'on' : ''}"><img src="${L.sprite(L.setOf(s.year), L.clsOf(s), s.sex, L.STAGES.find(x => x[0] === id)[2] + 1, true)}" alt=""><span>${n}</span></div>`).join('')}</div>
-        <h5>人生目標</h5>${G.goals(s).map(g => `<div class="goal ${g.done ? 'done' : ''}"><i></i><span>${esc(g.t)}${g.max > 1 ? `（${g.cur}/${g.max}）` : ''}</span></div>`).join('')}
+        <h5>志向</h5>${ambHtml()}
+        <h5>才能（${G.perksOf(s).length}／${G.PERKS.length}）</h5>${perkHtml()}
+        <h5>人生目標</h5>${G.goals(s).filter(g => !g.amb).map(g => `<div class="goal ${g.done ? 'done' : ''}"><i></i><span>${esc(g.t)}${g.max > 1 ? `（${g.cur}/${g.max}）` : ''}</span></div>`).join('')}
         <h5>志業</h5><p>${rows.length ? rows.join('、') : '尚未留下什麼'}</p>
       </div>
     </div>`;
+  }
+  function ambHtml() {
+    const a = G.ambition(s);
+    if (!a) return `<p class="muted">${s.age < 12 ? '十二歲時立志。' : '尚未立志，過了這一年就會問你。'}</p>`;
+    return `<p><b class="persona">${esc(a.n)}</b>　<span class="muted">${esc(a.d)}</span></p><div class="steps">${a.steps.map((st, i) => `<div class="${i < s.amb.stage ? 'done' : i === s.amb.stage ? 'now' : ''}"><i>${i < s.amb.stage ? '✓' : i + 1}</i>${esc(st[0])}</div>`).join('')}</div>`;
+  }
+  function perkHtml() {
+    const have = G.perksOf(s);
+    const next = G.PERKS.filter(p => !have.includes(p)).filter((p, i, arr) => arr.findIndex(x => x.k === p.k) === i)
+      .sort((x, y) => (x.at - s.skills[x.k]) - (y.at - s.skills[y.k])).slice(0, 3);
+    return `<div class="perks">${have.map(p => `<span class="perk on" title="${esc(p.d)}">${esc(p.n)}<small>${esc(p.d)}</small></span>`).join('')}${next.map(p => `<span class="perk" title="${esc(p.d)}">${esc(p.n)}<small>${D.SKILLS[p.k]} ${Math.round(s.skills[p.k])}／${p.at}</small></span>`).join('')}</div>`;
   }
   function familyHtml() {
     const row = n => `<div class="pp ${n.alive ? '' : 'gone'}"><img src="${L.npc(s, n, true)}" alt=""><div><b>${esc(n.label || '')} ${esc(n.name)}</b><small>${n.age} 歲${n.jobName ? '．' + esc(n.jobName) : ''}${n.blurb ? '．' + esc(n.blurb) : ''}${n.trait ? '．性情' + esc(n.trait) : ''}${(n.mem || []).length ? `<br><i class="mem">記得：${n.mem.slice(-2).map(m => esc(m.t)).join('；')}</i>` : ''}</small></div><span class="aff">${n.alive ? '親密 ' + Math.round(n.aff) : (n.gone ? n.note || '離去' : '已故')}</span></div>`;
@@ -506,6 +544,8 @@
     input.placeholder = ev.input || '';
     const box = $('evChoices');
     box.innerHTML = '';
+    box.classList.toggle('many', ev.choices.length > 5);
+    card.classList.toggle('wide', ev.choices.length > 5);
     ev.choices.forEach(c => {
       const b = document.createElement('button');
       b.className = 'choice'; b.disabled = c.off;
@@ -553,7 +593,7 @@
   function archive(life) {
     const list = store.get(ARCHIVE) || [];
     if (!list.some(x => x.id === life.birthYear + life.name + life.death.year)) {
-      list.unshift({ id: life.birthYear + life.name + life.death.year, name: life.name, eraId: life.eraId, era: D.ERAS.find(e => e.id === life.eraId).name, city: life.birthCity, born: life.birthYear, age: life.age, cause: life.death.cause, rank: life.biography.legacy.n, title: life.biography.title, text: G.bioText(life) });
+      list.unshift({ id: life.birthYear + life.name + life.death.year, name: life.name, eraId: life.eraId, era: D.ERAS.find(e => e.id === life.eraId).name, city: life.birthCity, born: life.birthYear, age: life.age, score: G.lifeScore(life).total, grade: G.lifeScore(life).grade, cause: life.death.cause, rank: life.biography.legacy.n, title: life.biography.title, text: G.bioText(life) });
       store.set(ARCHIVE, list.slice(0, 60));
     }
   }
@@ -573,6 +613,7 @@
         <div><b>${st.fame}</b><small>聲望</small></div><div><b>${st.virtue}</b><small>德行</small></div><div><b>${st.money}</b><small>遺產（${esc(G.coin(life))}）</small></div>
         <div><b>${st.children}</b><small>子女</small></div><div><b>${life.met.length}</b><small>名士之交</small></div><div><b>${b.div.filter(d => d.tier >= 2).length}</b><small>影響史事</small></div>
       </div>
+      ${scoreHtml(life)}
       <div class="bio">${b.paragraphs.map(p => `<p>${esc(p)}</p>`).join('')}</div>
       <div class="epitaph">${esc(b.epitaph)}</div>
       ${div}
@@ -595,6 +636,14 @@
         s = next; store.set(SAVE, s); enterGame();
       };
     });
+  }
+  function scoreHtml(life) {
+    const sc = G.lifeScore(life);
+    const past = (store.get(ARCHIVE) || []).map(x => x.score || 0).sort((a, b) => b - a);
+    const rank = past.filter(v => v > sc.total).length + 1;
+    const best = rank === 1 && past.length > 1;
+    return `<div class="score"><div class="score-main"><span class="grade">${sc.grade}</span><div><b>${sc.total}</b><small>人生評分${past.length > 1 ? `．歷世第 ${rank} 名（共 ${past.length} 世）` : ''}${best ? '．新紀錄' : ''}</small></div></div>
+      <div class="score-parts">${sc.parts.map(p => `<span>${p[0]} <b>${p[1]}</b></span>`).join('')}</div></div>`;
   }
   function heirHtml(life) {
     const hs = G.heirs(life);
@@ -629,7 +678,7 @@
     $('archiveBody').innerHTML = `<div class="eyebrow">千年浮生錄</div><h2>走過的人生</h2>
       <p class="muted">只是記錄，不影響抽籤：每個時代隨時都可能抽到，也沒有需要解鎖的內容。</p>
       <div class="eras">${D.ERAS.map(e => `<div class="${seen.has(e.id) ? 'on' : ''}">${esc(e.name)}</div>`).join('')}</div>
-      ${list.length ? list.map((x, i) => `<div class="arc"><b>${esc(x.name)}</b>　${esc(x.era)}．${esc(x.city)}．享年 ${x.age} 歲．${esc(x.rank)}<br><span class="muted">${esc(x.title)}．${esc(x.cause)}</span><br><button class="btn ghost" data-read="${i}" style="padding:4px 10px;margin-top:5px;font-size:13px">讀傳記</button></div>`).join('') : '<p>還沒有走完任何一世。</p>'}
+      ${list.length ? list.map((x, i) => `<div class="arc"><b>${esc(x.name)}</b>　${esc(x.era)}．${esc(x.city)}．享年 ${x.age} 歲．${esc(x.rank)}${x.score ? `．評分 ${x.score}（${esc(x.grade || '')}）` : ''}<br><span class="muted">${esc(x.title)}．${esc(x.cause)}</span><br><button class="btn ghost" data-read="${i}" style="padding:4px 10px;margin-top:5px;font-size:13px">讀傳記</button></div>`).join('') : '<p>還沒有走完任何一世。</p>'}
       <h3>成就（${Object.keys(store.get(ACHKEY) || {}).length}／${ACH.length}）</h3>
       <div class="achs">${ACH.map(([id, n, d]) => `<div class="${(store.get(ACHKEY) || {})[id] ? 'on' : ''}"><b>${esc(n)}</b><small>${esc(d)}</small></div>`).join('')}</div>
       <div id="arcRead"></div>
