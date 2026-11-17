@@ -100,6 +100,15 @@
     };
   }
 
+  /* 六十四人格：六題各二選，合成 8 種性情 × 8 種志趣，各有一項天賦 */
+  const P_ADJ = { AAA: '剛正', AAB: '俠義', ABA: '仁厚', ABB: '瀟灑', BAA: '嚴謹', BAB: '機敏', BBA: '溫潤', BBB: '靈慧' };
+  const P_CORE = { AAA: ['闖將', 'wu'], AAB: ['匠人', 'gong'], ABA: ['行商', 'shang'], ABB: ['耕者', 'nong'], BAA: ['遊俠', 'wu'], BAB: ['醫者', 'yi'], BBA: ['謀士', 'wen'], BBB: ['學者', 'wen'] };
+  function persona(tr) {
+    const a = (tr && tr.code ? tr.code : 'AAAAAA').split('');
+    const core = P_CORE[a[1] + a[4] + a[5]] || P_CORE.AAA;
+    return { name: (P_ADJ[a[0] + a[2] + a[3]] || '剛正') + core[0], gift: core[1], giftText: `天賦：${SKILLS[core[1]]}每年自然精進，學起來事半功倍` };
+  }
+
   function newLife(fate) {
     const era = ERAS.find(e => e.id === fate.eraId);
     const fam = FAMILIES.find(f => f.id === fate.familyId);
@@ -253,6 +262,7 @@
     { id: 'seekjob', g: 'work', label: s => (s.job ? '改行轉業' : '謀一份差事'), hint: '選擇職業', min: 13, noAp: true, run: s => { pushEvent(s, 'jobChoice', {}); return null; } },
     { id: 'exam', g: 'work', label: s => examLabel(s), hint: s => examHint(s), min: 14, avail: examAvail, run: doExam },
     { id: 'invest', g: 'work', label: '投資買賣', hint: '可能賺也可能賠', min: 18, avail: s => (s.money < 20 ? '本錢不足 20' : ''), run: doInvest },
+    { id: 'estate', gate: true, g: 'work', label: '置辦產業', hint: '買田、開鋪、置宅，年年有進項', min: 18, noAp: true, run: s => { pushEvent(s, 'estateChoice', {}); return null; } },
     { id: 'project', gate: true, g: 'world', label: '興辦地方事業', hint: '修橋、義學、義倉等', min: 22, noAp: true, run: s => { pushEvent(s, 'projectChoice', {}); return null; } },
 
     // 交友
@@ -640,6 +650,18 @@
     fx: st => { if (st.ap > 0) spend(st); st.projects.push({ id: p.id, n: p.n, left: p.yrs, done: false, startY: st.year }); return say(st, `你開始籌辦「${p.n}」。`, { money: -p.cost, fame: 3 }, 'major'); }
   })).concat([{ t: '暫不興辦', fx: () => ({ text: '你決定再積攢些力量。', deltas: [] }) }]) });
 
+  const ESTATES = [
+    { id: 'field', n: '薄田數畝', cost: 45, income: 4, line: '春種秋收，租子雖薄，年年不斷。' },
+    { id: 'shop', n: '臨街鋪面', cost: 110, income: 11, line: '鋪子開張，夥計迎來送往。', req: s => s.skills.shang >= 20 },
+    { id: 'house', n: '寬敞宅院', cost: 90, income: 0, mood: 3, line: '一家人總算有了像樣的屋簷。' },
+    { id: 'manor', n: '田莊一座', cost: 260, income: 26, line: '阡陌相連，佃戶數十家。', req: s => s.fame >= 25 }
+  ];
+  const estateCount = (s, id) => (s.assets || []).filter(a => a.id === id).length;
+  E('estateChoice', { title: '置辦產業', text: s => `手上有 ${Math.round(s.money)} ${coin(s)}。產業每年自有進項，也能留給子孫。`, choices: s => ESTATES.filter(e => estateCount(s, e.id) < (e.id === 'field' ? 4 : e.id === 'shop' ? 2 : 1)).map(e => ({
+    t: e.n, hint: `價 ${e.cost} ${coin(s)}．${e.income ? '年入約 ' + e.income : '住得安穩，心境長年較好'}${e.req && !e.req(s) ? (e.id === 'shop' ? '．需商道 20' : '．需聲望 25') : ''}`, req: st => st.money >= e.cost && (!e.req || e.req(st)),
+    fx: st => { if (st.ap > 0) spend(st); (st.assets = st.assets || []).push({ id: e.id, n: e.n, income: e.income, mood: e.mood || 0, y: st.year }); return say(st, `你置下了${e.n}。${e.line}`, { money: -e.cost, fame: 1 }, 'major'); }
+  })).concat([{ t: '再看看', fx: () => ({ text: '錢要花在刀口上，你決定再等等。', deltas: [] }) }]) });
+
   const BOOK_KIND = { wen: '詩文集', wu: '兵法論', gong: '工藝圖說', shang: '貨殖錄', yi: '醫方集', nong: '農書' };
   E('bookChoice', { title: '著書立說', text: '你想留下什麼樣的文字？一部書要花一整年心血。', choices: s => Object.keys(SKILLS).filter(k => s.skills[k] >= 35 && !s.works.some(w => w.kind === k)).map(k => ({
     t: BOOK_KIND[k], hint: `以${SKILLS[k]}（${Math.round(s.skills[k])}）為本`,
@@ -886,6 +908,7 @@
     if (!s.alive || s.pending.length) return false;
     s.year++; s.age++;
     syncAp(s);
+    if (s.age >= 6) { const g = persona(s.traits).gift; s.skills[g] = clamp(s.skills[g] + .8, 0, 100); }
     const era = eraAt(s.year), prev = eraAt(s.year - 1);
     if (era.id !== prev.id && era.name !== prev.name) { s.regime = ''; pushEvent(s, 'eraChange', { name: era.name }); s.world.stable = clamp(s.world.stable - 6, 0, 100); }
 
@@ -916,6 +939,8 @@
       if (s.job) { const j = JOBS[s.job.id]; s.money += Math.round(j.pay[s.job.rank] * .55 * (.75 + s.world.rich / 200)); }
       const sp = spouse(s);
       if (sp && sp.job && sp.job !== 'home') s.money += 3 + sp.status;
+      // 產業進項：亂世歉收，盛世多得
+      (s.assets || []).forEach(a => { s.money += Math.round(a.income * (.55 + s.world.stable / 220 + s.world.rich / 400)); s.mood = clamp(s.mood + (a.mood || 0), 0, 100); });
       if (s.money < 0) {
         const lacking = -s.money;
         s.mood = clamp(s.mood - 3 - lacking / 10, 0, 100);
@@ -1106,6 +1131,45 @@
     s.biography = biography(s);
   }
 
+  /* ---------- 家族延續：由在世的子女接續此家 ---------- */
+  function heirs(life) {
+    if (!life || life.alive) return [];
+    return life.npcs.filter(n => n.rel === 'child' && n.alive && !n.gone);
+  }
+  function continueAs(life, childId) {
+    const kid = heirs(life).find(n => n.id === childId);
+    if (!kid) return null;
+    const era = eraAt(life.year);
+    const share = heirs(life).length;
+    const s = {
+      v: 2, rng: (life.rng ^ (kid.id * 2654435761)) | 0, eraId: era.id, birthYear: life.year - kid.age, year: life.year, age: kid.age, sex: kid.sex === 'f' ? 'f' : 'm', name: kid.name,
+      city: life.city, regime: life.regime, birthCity: life.city, familyId: life.familyId, famName: life.famName,
+      hp: 84, con: 0, mood: 55, fame: Math.round(life.fame * .3), virtue: Math.round(life.virtue * .2), money: Math.max(0, Math.round(life.money / share)),
+      skills: { wen: 0, wu: 0, gong: 0, shang: 0, yi: 0, nong: 0 },
+      job: null, jobHist: [], exam: 0, disguise: false, schooled: kid.age >= 8 && (kid.edu || 0) > 4,
+      ap: 0, apMax: 0, season: 0, npcs: [], nextId: 1, spouseId: null, mentorId: null, ills: [],
+      log: [], hist: [], seen: (life.seen || []).slice(), div: [], world: Object.assign({}, life.world), projects: [], works: [], inv: [], breakthroughs: [],
+      met: [], flags: {}, pending: [], alive: true, death: null, loc: 'home', news: '', famineYears: 0,
+      gen: (life.gen || 1) + 1, forebears: (life.forebears || []).concat([{ name: life.name, rank: life.biography.legacy.n, y: life.year }]), pastDiv: (life.pastDiv || []).concat(life.div || [])
+    };
+    s.traits = traitsFrom(s, null);
+    s.con = clamp(60 + ri(s, -12, 18), 30, 95);
+    // 家學：父母的本事，孩子耳濡目染學了幾成；讀過的書也算數
+    const yrs = Math.max(0, kid.age - 5);
+    Object.keys(s.skills).forEach(k => { s.skills[k] = Math.round(clamp(life.skills[k] * .28 * Math.min(1, yrs / 12), 0, 45)); });
+    s.skills.wen = Math.round(clamp(s.skills.wen + (kid.edu || 0), 0, 60));
+    // 產業均分：整數件數，分不完的歸長
+    const mine = (life.assets || []).filter((a, i) => i % share === heirs(life).findIndex(n => n.id === kid.id));
+    s.assets = mine.map(a => Object.assign({}, a));
+    addNpc(s, { name: life.name, sex: life.sex, age: life.age, rel: 'parent', label: life.sex === 'm' ? '先父' : '先母', aff: 80, alive: false, status: 1 });
+    const other = life.npcs.find(n => n.rel === 'spouse' && n.alive);
+    if (other) addNpc(s, { name: other.name, sex: other.sex, age: other.age, rel: 'parent', label: other.sex === 'm' ? '父親' : '母親', aff: 75, job: other.job, status: other.status });
+    heirs(life).filter(n => n.id !== kid.id).forEach(n => addNpc(s, { name: n.name, sex: n.sex, age: n.age, rel: 'sibling', label: n.sex === 'm' ? (n.age >= kid.age ? '兄長' : '弟弟') : (n.age >= kid.age ? '姊姊' : '妹妹'), aff: 60, status: n.status }));
+    say(s, `${life.name}過世後，你（${s.name}）接過了這個家。這是此家的第 ${s.gen} 代。`, null, 'major');
+    syncAp(s);
+    return s;
+  }
+
   /* ---------- 傳記 ---------- */
   function jobTitle(s) {
     const all = s.jobHist.slice();
@@ -1129,7 +1193,7 @@
     const lg = legacyRank(s);
     const title = s.works.length ? '著述之士' : top ? top.name : (s.age < 15 ? '童稚' : '布衣');
     const p = [];
-    p.push(`${s.name}，${s.sex === 'm' ? '男' : '女'}，${era.name}${s.birthCity}人，生於${yearLabel(s.birthYear)}（${ganzhi(s.birthYear)}年），出身${s.famName}。性情${s.traits.label}。`);
+    p.push(`${s.name}，${s.sex === 'm' ? '男' : '女'}，${era.name}${s.birthCity}人，生於${yearLabel(s.birthYear)}（${ganzhi(s.birthYear)}年），出身${s.famName}${s.gen > 1 ? `，為${s.forebears[s.forebears.length - 1].name}之${s.sex === 'm' ? '子' : '女'}，承家第 ${s.gen} 代` : ''}。性情${s.traits.label}，人稱「${persona(s.traits).name}」。`);
     if (s.age < 15) {
       p.push(`可惜天不假年，${s.age} 歲便離開了人世。短短的日子裡，${parents(s).length ? '父母視若珍寶' : '身邊的人都記得這個孩子'}。`);
     } else {
@@ -1169,7 +1233,7 @@
     return lines.join('\n');
   }
 
-  const api = { goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
+  const api = { persona, heirs, continueAs, goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.FS_ENGINE = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -70,7 +70,7 @@
       fate = G.drawFate(null, answers.length === 6 ? answers.slice() : null);
       const era = D.ERAS.find(e => e.id === fate.eraId);
       const fam = D.FAMILIES.find(f => f.id === fate.familyId);
-      $('fateBox').innerHTML = `<b>${esc(era.name)}．${esc(fate.city)}</b>${esc(G.yearLabel(fate.year))}（${esc(G.ganzhi(fate.year))}年）<br>${esc(fam.name)}．${fate.sex === 'm' ? '男' : '女'}孩<br>你將以「${esc(fate.name)}」之名降生。`;
+      $('fateBox').innerHTML = `<b>${esc(era.name)}．${esc(fate.city)}</b>${esc(G.yearLabel(fate.year))}（${esc(G.ganzhi(fate.year))}年）<br>${esc(fam.name)}．${fate.sex === 'm' ? '男' : '女'}孩<br>你將以「${esc(fate.name)}」之名降生。${answers.length === 6 ? `<br>人格：<b class="persona inline">${esc(G.persona({ code: answers.join('') }).name)}</b>` : ''}`;
       $('btnDraw').disabled = false;
       $('btnDraw').classList.add('hidden');
       $('btnBegin').classList.remove('hidden');
@@ -106,7 +106,7 @@
     const cal = G.calendar(s);
     $('tHead').src = L.player(s, true);
     $('tName').textContent = s.name;
-    $('tFam').textContent = `${s.famName}．屬${G.zodiac(s.birthYear)}`;
+    $('tFam').textContent = `${s.famName}．${G.persona(s.traits).name}`;
     $('tAge').textContent = s.age + '歲';
     $('tJob').textContent = s.age < 6 ? '幼童' : G.curJob(s);
     const reign = s.year < 1912 ? G.reignLabel(s.year) : '';
@@ -260,6 +260,24 @@
     if (h) h.onclick = () => { store.set(SAVE, s); closeSheet(); home(); };
     const y = body.querySelector('#sysYear');
     if (y) y.onclick = passYear;
+    const ex = body.querySelector('#sysExport');
+    if (ex) ex.onclick = () => download(JSON.stringify(s), `浮生千年_存檔_${s.name}_${s.age}歲.json`, 'application/json');
+    const im = body.querySelector('#sysImport'), file = body.querySelector('#sysFile');
+    if (im) im.onclick = () => file.click();
+    if (file) file.onchange = () => {
+      const f = file.files[0];
+      if (!f) return;
+      f.text().then(txt => {
+        const d = JSON.parse(txt);
+        if (!d || d.v !== 2 || !d.alive || !d.skills || !Array.isArray(d.npcs)) throw new Error('bad');
+        s = d; store.set(SAVE, s); closeSheet(); enterGame();
+      }).catch(() => { body.querySelector('#sysMsg').textContent = '這個檔案不是可用的存檔。'; });
+    };
+    const q = body.querySelector('#sysQuit');
+    if (q) q.onclick = () => {
+      if (q.dataset.sure) { store.del(SAVE); closeSheet(); home(); }
+      else { q.dataset.sure = '1'; q.textContent = '再按一次確定放棄（不會留下傳記）'; }
+    };
   }
 
   function actHtml() {
@@ -298,7 +316,7 @@
         <h4>${esc(s.name)}</h4>
         <div class="kv2"><label>年齡</label><span>${s.age} 歲</span><label>身分</label><span>${esc(G.curJob(s))}</span><label>朝代</label><span>${esc(G.eraAt(s.year).name)}</span><label>籍貫</label><span>${esc(s.birthCity)}</span></div>
         <h5>狀態</h5>${bar('健康', s.hp, 'hp')}${bar('心情', s.mood, 'mood')}${bar('體力', s.sta ?? 100, 'sta')}
-        <h5>性格與天賦</h5><p>${esc(s.traits.label)}</p>
+        <h5>性格與天賦</h5><p><b class="persona">${esc(G.persona(s.traits).name)}</b>　${esc(s.traits.label)}<br><span class="muted">${esc(G.persona(s.traits).giftText)}</span></p>
         <h5>身體</h5><p>${s.ills.length ? s.ills.map(i => esc(i.n) + (i.chronic ? '（宿疾）' : '')).join('、') : '目前無病無痛'}</p>
       </div>
       <div class="grow-side">
@@ -320,6 +338,8 @@
     const inv = (s.inv || []).map(i => (typeof i === 'string' ? i : i.n)).filter(Boolean);
     return `<div class="bag"><div class="sect">錢財</div><p class="big">${esc(moneyText(s.money))}</p>
       <p class="muted">每年的開銷與收成會在過年時結算。</p>
+      <div class="sect">產業</div>${(s.assets || []).length ? `<p>${Object.values(s.assets.reduce((m, a) => { (m[a.id] = m[a.id] || { n: a.n, c: 0, inc: 0 }); m[a.id].c++; m[a.id].inc += a.income; return m; }, {})).map(g => esc(g.n) + (g.c > 1 ? ` ×${g.c}` : '') + (g.inc ? `（年入約 ${g.inc}）` : '')).join('、')}</p><p class="muted">合計年入約 ${s.assets.reduce((n, a) => n + a.income, 0)} ${esc(G.coin(s))}，世局安定時多些，亂世少些。可在「行動→工作→置辦產業」添置。</p>` : '<p>尚無田產鋪面。年滿十八後可在「行動→工作→置辦產業」添置。</p>'}
+      ${s.gen > 1 ? `<div class="sect">家世</div><p>此家第 ${s.gen} 代。先人：${s.forebears.map(f => esc(f.name) + '（' + esc(f.rank) + '）').join('、')}</p>` : ''}
       <div class="sect">隨身之物</div><p>${inv.length ? inv.map(esc).join('、') : '身無長物'}</p>
       <div class="sect">著作與事業</div><p>${[...s.works.map(w => w.n), ...s.projects.map(p => p.n + (p.done ? '（已落成）' : '（興建中）'))].map(esc).join('、') || '尚無'}</p>
       <div class="sect">聲望與德行</div><p>聲望 ${Math.round(s.fame)}．德行 ${Math.round(s.virtue)}</p></div>`;
@@ -346,7 +366,7 @@
     return `<p class="muted">此生紀事，最近的在上。</p>` + s.log.slice(-60).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
   }
   function sysHtml() {
-    return `<p>進度會在每次行動後自動存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button></div>
+    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysQuit" class="btn ghost">放棄此生</button></div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
       <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
   }
 
@@ -450,6 +470,7 @@
       <div class="epitaph">${esc(b.epitaph)}</div>
       ${div}
       <h3>生平年表</h3><div class="tl">${tl}</div>
+      ${heirHtml(life)}
       <div class="home-actions">
         <button id="btnAgain" class="btn primary">再抽一世</button>
         <button id="btnCopy" class="btn">複製傳記</button>
@@ -460,6 +481,25 @@
     bioButtons(G.bioText(life), life.name);
     $('btnAgain').onclick = () => { answers = []; openDraw(); };
     $('btnHome').onclick = home;
+    document.querySelectorAll('[data-heir]').forEach(b => {
+      b.onclick = () => {
+        const next = G.continueAs(life, Number(b.dataset.heir));
+        if (!next) return;
+        s = next; store.set(SAVE, s); enterGame();
+      };
+    });
+  }
+  function heirHtml(life) {
+    const hs = G.heirs(life);
+    if (!hs.length) return '';
+    return `<h3>家族延續</h3><p class="muted">可以不再抽籤，改由在世的子女接續這個家：承襲部分家產、產業、家學與名聲，時代照原來的年份往下走。</p>
+      <div class="heirs">${hs.map(n => `<button class="heir" data-heir="${n.id}"><img src="${L.npc(life, n, true)}" alt=""><b>${esc(n.name)}</b><small>${n.sex === 'm' ? '子' : '女'}．${n.age} 歲</small></button>`).join('')}</div>`;
+  }
+  function download(text, filename, type) {
+    const url = URL.createObjectURL(new Blob([text], { type: (type || 'text/plain') + ';charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   function bioButtons(text, name) {
     $('btnCopy').onclick = async () => {
