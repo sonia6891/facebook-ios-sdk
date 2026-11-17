@@ -1,7 +1,7 @@
-/* 浮生千年：畫面與互動。規則都在 engine.js，這裡只負責顯示與存檔。 */
+/* 浮生千年：畫面與互動。規則都在 engine.js，美術對應在 look.js，這裡只負責顯示與存檔。 */
 (function () {
   'use strict';
-  const G = window.FS_ENGINE, D = window.FS_DATA, A = window.FS_ART;
+  const G = window.FS_ENGINE, D = window.FS_DATA, L = window.FS_LOOK;
   const $ = id => document.getElementById(id);
   const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const SAVE = 'fusheng.save.v2', ARCHIVE = 'fusheng.archive.v2';
@@ -11,12 +11,12 @@
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* 同上 */ } }
   };
 
-  let answers = [], fate = null, s = null, tab = 'people', openGroup = null, artKey = '';
+  let answers = [], fate = null, s = null, sheet = null, actTab = 'study', picked = null;
   const GROUPS = [
-    { id: 'study', n: '學藝', i: '學' }, { id: 'work', n: '工作', i: '業' }, { id: 'social', n: '交友', i: '友' },
-    { id: 'family', n: '家庭', i: '家' }, { id: 'health', n: '養生', i: '養' }, { id: 'world', n: '世事', i: '世' }
+    { id: 'study', n: '學習' }, { id: 'work', n: '工作' }, { id: 'social', n: '社交' },
+    { id: 'family', n: '家庭' }, { id: 'health', n: '養生' }, { id: 'world', n: '世事' }
   ];
-  const SEASONS = ['春', '夏', '秋', '冬'];
+  const SK_ICON = { wen: '書', wu: '武', gong: '匠', shang: '商', yi: '醫', nong: '農' };
 
   function show(id) {
     document.querySelectorAll('.screen').forEach(x => x.classList.add('hidden'));
@@ -27,13 +27,11 @@
   /* ---------- 首頁 ---------- */
   function home() {
     show('home');
-    $('homeArt').innerHTML = A.townSvg({ style: 'song', season: 0, seed: 1105, s: { year: 1105 }, war: false, compact: false });
-    $('homeArt').firstElementChild.setAttribute('preserveAspectRatio', 'xMidYMid slice');
     $('btnContinue').classList.toggle('hidden', !store.get(SAVE));
   }
   $('btnContinue').onclick = () => {
     const saved = store.get(SAVE);
-    if (saved && saved.v === 2) { s = saved; enterGame(); }
+    if (saved && saved.v === 2) { s = saved; if (!s.loc || !L.PLACES.some(p => p.id === s.loc)) s.loc = 'town'; enterGame(); }
   };
   $('btnQuiz').onclick = () => { answers = []; show('quiz'); renderQuiz(); };
   $('btnSkip').onclick = () => { answers = []; openDraw(); };
@@ -43,12 +41,12 @@
     const i = answers.length;
     if (i >= D.QUESTIONS.length) { openDraw(); return; }
     const q = D.QUESTIONS[i];
-    $('qProgress').textContent = `第 ${i + 1} 問．共 ${D.QUESTIONS.length} 問`;
+    $('qProgress').textContent = `人格測驗．第 ${i + 1} 問／${D.QUESTIONS.length}`;
     $('qText').textContent = q[0];
     $('qChoices').innerHTML = '';
     [q[1], q[2]].forEach((t, j) => {
       const b = document.createElement('button');
-      b.className = 'btn'; b.textContent = t;
+      b.className = 'answer'; b.textContent = t;
       b.onclick = () => { answers.push(j ? 'B' : 'A'); renderQuiz(); };
       $('qChoices').appendChild(b);
     });
@@ -61,17 +59,14 @@
     $('fateBox').innerHTML = '<p class="muted">手執籤筒，命運尚未揭曉。</p>';
     $('btnDraw').classList.remove('hidden');
     $('btnBegin').classList.add('hidden');
-    let st = '';
-    for (let i = 0; i < 13; i++) st += `<i style="transform:rotate(${(i - 6) * 3.4}deg)"></i>`;
-    $('sticks').innerHTML = st;
+    $('drawStick').classList.remove('out');
   }
   $('btnDraw').onclick = () => {
     $('btnDraw').disabled = true;
-    $('sticks').classList.add('shake');
+    $('tube').classList.add('shake');
     setTimeout(() => {
-      $('sticks').classList.remove('shake');
-      const idx = Math.floor(Math.random() * 13);
-      $('sticks').children[idx].classList.add('out');
+      $('tube').classList.remove('shake');
+      $('drawStick').classList.add('out');
       fate = G.drawFate(null, answers.length === 6 ? answers.slice() : null);
       const era = D.ERAS.find(e => e.id === fate.eraId);
       const fam = D.FAMILIES.find(f => f.id === fate.familyId);
@@ -79,153 +74,125 @@
       $('btnDraw').disabled = false;
       $('btnDraw').classList.add('hidden');
       $('btnBegin').classList.remove('hidden');
-    }, 1500);
+    }, 1400);
   };
   $('btnBegin').onclick = () => {
     if (!fate) return;
     s = G.newLife(fate);
+    s.loc = 'home';
     enterGame();
   };
 
   /* ---------- 主畫面 ---------- */
   function enterGame() {
     show('game');
-    artKey = '';
-    openGroup = null;
+    closeSheet();
     renderAll();
-    setNarr('你睜開眼睛，來到了這個世上。', []);
+    setNarr(s.age === 0 ? '你睜開眼睛，來到了這個世上。' : `${s.age} 歲的你，回到了${s.city}。`, []);
     pumpEvents();
   }
   function renderAll() {
-    renderTop(); renderLeft(); renderRight(); renderActions(); renderStage(); renderPop();
+    renderTop(); renderSides(); renderStage(); renderNav();
+    if (sheet) renderSheet();
   }
-  const sealFor = n => (n.length > 2 ? n.slice(0, 2) : n);
-  const seasonIdx = () => (s.ap <= 0 && s.apMax > 0 ? 3 : s.season);
+  const pct = v => Math.max(0, Math.min(100, Math.round(v)));
+  function moneyText(v) {
+    const c = G.coin(s), n = Math.round(v);
+    return `${n} ${c}`;
+  }
 
   function renderTop() {
     const era = G.eraAt(s.year);
-    $('tSeal').textContent = sealFor(era.name);
+    const cal = G.calendar(s);
+    $('tHead').src = L.player(s, true);
+    $('tName').textContent = s.name;
+    $('tFam').textContent = `${s.famName}．屬${G.zodiac(s.birthYear)}`;
+    $('tAge').textContent = s.age + '歲';
+    $('tJob').textContent = s.age < 6 ? '幼童' : G.curJob(s);
+    const reign = s.year < 1912 ? G.reignLabel(s.year) : '';
+    $('tEra').textContent = `${era.name}${reign ? '．' + reign : ''}（${s.year < 0 ? '前' + -s.year : s.year}年）`;
     $('tPlace').textContent = s.city;
-    $('tEra').textContent = era.name;
-    $('tYear').textContent = G.yearLabel(s.year);
-    $('tGanzhi').textContent = G.dateLabel(s);
-    $('tAge').textContent = s.age + ' 歲';
-    const hp = Math.round(s.hp), mood = Math.round(s.mood);
-    $('tHp').textContent = hp; $('tMood').textContent = mood;
-    $('mHp').style.width = hp + '%'; $('mMood').style.width = mood + '%';
-    $('tCoinLabel').textContent = G.coin(s);
-    $('tMoney').textContent = Math.round(s.money);
-    $('tFame').textContent = Math.round(s.fame);
-    $('tVirtue').textContent = Math.round(s.virtue);
-    $('tSeason').textContent = SEASONS[seasonIdx()];
+    const hp = pct(s.hp), mood = pct(s.mood), sta = pct(s.sta == null ? 100 : s.sta);
+    $('tHp').textContent = hp; $('tMood').textContent = mood; $('tSta').textContent = sta;
+    $('mHp').style.width = hp + '%'; $('mMood').style.width = mood + '%'; $('mSta').style.width = sta + '%';
+    $('tCoinLabel').textContent = '錢財';
+    $('tMoney').textContent = moneyText(s.money);
+    $('tSeason').textContent = cal.season;
+    $('tSeason').dataset.s = cal.seasonIdx;
+    $('tDay').textContent = cal.month + cal.day;
+    $('tWeather').textContent = cal.weather + ' ' + cal.icon;
     let ap = '';
     for (let i = 0; i < s.apMax; i++) ap += `<i class="${i < s.ap ? 'on' : ''}"></i>`;
     $('tAp').innerHTML = ap;
-  }
-  function renderLeft() {
-    $('pPortrait').innerHTML = A.portrait(s);
-    $('pName').textContent = s.name;
-    $('pJob').textContent = G.curJob(s);
-    $('pFamily').textContent = `${s.famName}．${s.sex === 'm' ? '男' : '女'}．屬${G.zodiac(s.birthYear)}`;
-    $('pTraits').textContent = s.traits.label;
-    $('pSkills').innerHTML = Object.keys(D.SKILLS).map(k => {
-      const v = Math.round(s.skills[k]);
-      return `<div class="sk"><span>${D.SKILLS[k]}</span><div class="m"><span style="width:${v}%"></span></div><em>${v}</em></div>`;
-    }).join('');
-    $('pIlls').innerHTML = s.ills.length ? s.ills.map(i => `<span class="ill">${esc(i.n)}${i.chronic ? '（宿疾）' : ''}</span>`).join('') : '<span class="muted">目前無病無痛</span>';
-    const rows = [];
-    s.projects.forEach(p => rows.push(`${esc(p.n)}${p.done ? '（已落成）' : `（尚需 ${p.left} 年）`}`));
-    s.works.forEach(w => rows.push(esc(w.n)));
-    s.breakthroughs.forEach(id => rows.push(esc(D.BREAKTHROUGHS.find(b => b.id === id).n)));
-    $('pProjects').innerHTML = rows.length ? rows.map(r => `<div>・${r}</div>`).join('') : '<span class="muted">尚未留下什麼</span>';
-  }
-  function renderRight() {
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.tab === tab));
-    const b = $('tabBody');
-    if (tab === 'people') b.innerHTML = peopleHtml();
-    else if (tab === 'world') b.innerHTML = worldHtml();
-    else if (tab === 'chron') b.innerHTML = chronHtml();
-    else b.innerHTML = histHtml();
-  }
-  function peopleHtml() {
-    const row = n => `<div class="pp ${n.alive ? '' : 'gone'}"><b>${esc(n.label || '')} ${esc(n.name)}</b><span class="aff">${n.alive ? '情誼 ' + Math.round(n.aff) : (n.gone ? n.note || '離去' : '已故')}</span><small>${n.age} 歲${n.jobName ? '．' + esc(n.jobName) : ''}${n.blurb ? '．' + esc(n.blurb) : ''}${n.trait ? '．性情' + esc(n.trait) : ''}</small></div>`;
-    const sec = (title, list) => (list.length ? `<div class="sect">${title}</div>${list.map(row).join('')}` : '');
-    const by = rels => s.npcs.filter(n => rels.includes(n.rel));
-    const html = sec('婚姻', by(['spouse', 'late', 'ex'])) + sec('子女', by(['child'])) + sec('父母手足', by(['parent', 'sibling'])) + sec('師友', by(['mentor', 'friend', 'figure'])) + sec('對手', by(['rival']));
-    return html || '<p class="muted">身邊暫時無人。</p>';
-  }
-  function worldHtml() {
-    const era = G.eraAt(s.year);
-    const w = s.world;
-    const bar = (n, v) => `<div class="wbar"><span>${n}</span><div class="m"><span style="width:${Math.round(v)}%"></span></div><em>${Math.round(v)}</em></div>`;
-    const near = D.HISTORY.filter(h => h.y > s.year && h.y <= s.year + 30)[0];
-    const figs = D.FIGURES.filter(f => s.year >= f[1] && s.year <= f[2]).slice(0, 4);
-    const exam = { noble: '世卿世祿', merit: '軍功爵制', chaju: '察舉徵辟', jiupin: '九品中正', keju: '科舉取士', modern: '新式學制與文官考試', none: '科舉暫停，由吏入仕' }[G.examSystem(s.year)];
-    return `<div class="sect">當世</div><p>${esc(era.name)}，${esc(s.city)}。選官之法：${exam}。</p>
-      <div class="sect">世局</div>${bar('安定', w.stable)}${bar('繁榮', w.rich)}${bar('文教', w.learn)}
-      <p class="muted">世局會隨你的作為與時代起伏，也會影響收入、瘟疫與兵禍。</p>
-      <div class="sect">坊間消息</div><p>${esc(s.news || '街坊無事。')}</p>
-      ${near ? `<div class="sect">史書在前</div><p>${near.y - s.year} 年後（${esc(G.yearLabel(near.y))}）將是「${esc(near.title)}」。活到那天，有機會參與其中。</p>` : ''}
-      ${figs.length ? `<div class="sect">當世人物</div><p>${figs.map(f => esc(f[0])).join('、')}</p>` : ''}`;
-  }
-  function chronHtml() {
-    return s.log.slice(-40).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
-  }
-  function histHtml() {
-    let h = `<p class="muted">你影響史事的力量取決於聲望、官階與本領。目前左右大局的機會約 ${Math.round(G.histChance(s) * 100)}%。</p>`;
-    if (s.div.length) h += '<div class="sect">歷史偏移</div>' + s.div.slice().reverse().map(d => `<div class="hcard t${d.tier}"><b>${esc(d.title)}</b>．${esc(G.yearLabel(d.y))}<br>${esc(d.alt)}</div>`).join('');
-    if (s.hist.length) h += '<div class="sect">親歷史事</div>' + s.hist.slice().reverse().map(x => `<div class="lg hist"><em>${x.age} 歲</em>${esc(x.title)}</div>`).join('');
-    else if (!s.div.length) h += '<p>此生尚未親歷載入史冊的大事。</p>';
-    return h;
-  }
-  function renderActions() {
-    $('actBar').innerHTML = GROUPS.map(g => `<button class="act-btn ${openGroup === g.id ? 'on' : ''}" data-g="${g.id}" aria-expanded="${openGroup === g.id}"><i>${g.i}</i>${g.n}</button>`).join('');
-    document.querySelectorAll('.act-btn').forEach(b => { b.onclick = () => togglePop(b.dataset.g); });
-    const y = $('btnYear');
-    y.textContent = s.age < 3 ? '長大一歲' : '過此一年';
-    y.classList.toggle('pulse', s.ap <= 0);
-  }
-  function togglePop(g) { openGroup = openGroup === g ? null : g; renderActions(); renderPop(); }
-  function renderPop() {
-    const pop = $('actPop');
-    if (!openGroup) { pop.classList.add('hidden'); return; }
-    const group = GROUPS.find(x => x.id === openGroup);
-    const list = G.actionList(s).filter(a => a.g === openGroup);
-    pop.classList.remove('hidden');
-    pop.innerHTML = `<h4><span>${group.n}．剩餘 ${s.ap} 次行動</span><button aria-label="關閉" id="popClose">×</button></h4>` + list.map(a => `<button class="item" data-id="${a.id}" ${a.off ? 'disabled' : ''}><b>${esc(a.label)}</b><small>${esc(a.off ? a.why : a.hint)}</small></button>`).join('');
-    $('popClose').onclick = () => togglePop(openGroup);
-    pop.querySelectorAll('.item').forEach(b => { b.onclick = () => act(b.dataset.id); });
+    $('tAp').title = `今年剩餘行動 ${s.ap}／${s.apMax}`;
   }
 
-  /* ---------- 城鎮 ---------- */
+  function renderSides() {
+    $('goals').innerHTML = G.goals(s).map(g => `<div class="goal ${g.done ? 'done' : ''}"><i></i><span>${esc(g.t)}${g.max > 1 ? `（${g.cur}/${g.max}）` : ''}</span></div>`).join('') || '<p class="muted">隨遇而安。</p>';
+    $('hints').innerHTML = hints().map(h => `<div class="hint ${h[0]}"><i>${h[0] === 'warn' ? '!' : ''}</i><span>${esc(h[1])}</span></div>`).join('');
+    $('skills').innerHTML = Object.keys(D.SKILLS).map(k => `<div class="sk"><i>${SK_ICON[k]}</i><span>${D.SKILLS[k]}</span><b>${Math.round(s.skills[k])}</b></div>`).join('');
+    const close = s.npcs.filter(n => n.alive && !n.gone && ['parent', 'spouse', 'child', 'mentor', 'friend', 'sibling'].includes(n.rel))
+      .sort((a, b) => relOrder(a) - relOrder(b) || b.aff - a.aff).slice(0, 3);
+    $('rels').innerHTML = close.length ? close.map(n => `<div class="rel"><img src="${L.npc(s, n, true)}" alt=""><span>${esc(n.label || '')}</span><b>${esc(n.name)}</b><em>親密 ${Math.round(n.aff)}</em></div>`).join('') : '<p class="muted">身邊暫時無人。</p>';
+  }
+  const relOrder = n => ({ spouse: 0, parent: 1, child: 2, mentor: 3, sibling: 4, friend: 5 }[n.rel] ?? 9);
+  function hints() {
+    const out = [];
+    if (s.pending.length) out.push(['warn', '有事待你決定']);
+    if (s.ills.length) out.push(['warn', '身染' + s.ills.map(i => i.n).join('、')]);
+    if (s.ap > 0) out.push(['', `今年還可行動 ${s.ap} 次`]);
+    else if (s.apMax > 0) out.push(['warn', '今年時光已盡，可過此一年']);
+    else out.push(['', '年紀尚幼，靜待長大']);
+    const near = D.HISTORY.filter(h => h.y > s.year && h.y <= s.year + 20)[0];
+    if (near) out.push(['', `${near.y - s.year} 年後：${near.title}`]);
+    if (s.news) out.push(['', s.news]);
+    return out.slice(0, 4);
+  }
+
+  /* ---------- 場景 ---------- */
+  let sceneSrc = '';
   function renderStage() {
-    const era = G.eraAt(s.year);
-    const compact = window.innerWidth < 720;
-    const sea = seasonIdx();
-    const war = s.world.stable < 34;
-    const key = [era.style, sea, war, compact, s.year < 67, s.year < 618, s.year >= 1912, s.city].join('|');
-    if (key !== artKey) {
-      artKey = key;
-      const seed = [...s.city].reduce((t, c) => t + c.charCodeAt(0), 0) + 7;
-      $('stage').innerHTML = A.townSvg({ style: era.style, season: sea, seed, s, war, compact });
-      $('stage').querySelectorAll('[data-group]').forEach(n => {
-        const open = () => { s.loc = n.dataset.loc; openGroup = n.dataset.group; movePlayer(); renderActions(); renderPop(); };
-        n.addEventListener('click', open);
-        n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-      });
+    if (!L.PLACES.some(p => p.id === s.loc)) s.loc = 'town';
+    const src = L.scene(s, s.loc);
+    if (src !== sceneSrc) {
+      sceneSrc = src;
+      const img = $('sceneImg');
+      img.classList.add('fade');
+      img.onload = () => img.classList.remove('fade');
+      img.src = src;
     }
-    movePlayer();
+    const place = L.PLACES.find(p => p.id === s.loc);
+    $('sceneName').textContent = s.loc === 'town' ? s.city : `${place.n}．${s.city}`;
+    const tags = s.loc === 'town'
+      ? L.PLACES.filter(p => p.tag).map(p => `<button class="ptag" data-loc="${p.id}" style="left:${p.tag[0]}%;top:${p.tag[1]}%">${p.n}</button>`).join('')
+      : `<button class="ptag back" data-loc="town" style="left:50%;top:14%">回到街上</button>`;
+    $('sceneTags').innerHTML = tags;
+    $('sceneTags').querySelectorAll('.ptag').forEach(b => { b.onclick = () => goPlace(b.dataset.loc, true); });
+    // 主角與身邊的人
+    const comp = companion();
+    $('actors').innerHTML = `<img class="actor me" src="${L.player(s)}" alt="${esc(s.name)}" style="--h:${heightOf(s.age)}">` +
+      (comp ? `<img class="actor npc" src="${L.npc(s, comp)}" alt="${esc(comp.name)}" title="${esc((comp.label || '') + ' ' + comp.name)}" style="--h:${heightOf(comp.age)}">` : '');
   }
-  function movePlayer() {
-    const m = document.getElementById('playerMark');
-    if (!m) return;
-    const p = A.placeOf(s, s.loc);
-    m.innerHTML = A.playerFigure(s);
-    m.style.transform = `translate(${p[0]}px, ${p[1]}px)`;
+  const heightOf = age => (age < 3 ? .5 : age < 10 ? .66 : age < 16 ? .84 : 1).toString();
+  function companion() {
+    const by = rels => s.npcs.find(n => n.alive && !n.gone && rels.includes(n.rel));
+    if (s.age < 10) return by(['parent']);
+    if (s.loc === 'home') return by(['spouse']) || by(['parent']) || by(['child']);
+    if (s.loc === 'school' || s.loc === 'study') return by(['mentor']);
+    if (s.loc === 'market' || s.loc === 'lane') return by(['friend']);
+    return null;
   }
-  // 行動對應到城鎮地點，讓人物真的走過去
-  const ACTION_LOC = { study: 'school', martial: 'yamen', craftl: 'workshop', tradel: 'market', medl: 'clinic', farml: 'fields', mentor: 'school', work: null, seekjob: 'market', exam: 'yamen', invest: 'market', project: 'yamen', meet: 'teahouse', tavern: 'teahouse', seek: 'teahouse', visitf: 'teahouse', filial: 'home', match: 'home', teach: 'home', homecare: 'home', divorce: 'home', rest: 'home', tonic: 'clinic', doctor: 'clinic', pray: 'temple', travel: 'market', charity: 'temple', petition: 'yamen', write: 'school', invent: 'workshop' };
-  const JOB_LOC = { farm: 'fields', craft: 'workshop', weave: 'workshop', trade: 'market', doctor: 'clinic', soldier: 'yamen', clerk: 'yamen', teacher: 'school', cleric: 'temple', artist: 'teahouse' };
+  function goPlace(loc, openActs) {
+    s.loc = loc;
+    renderStage();
+    store.set(SAVE, s);
+    const p = L.PLACES.find(x => x.id === loc);
+    if (openActs && p && p.g) { actTab = p.g[0]; openSheet('act'); }
+  }
+
+  // 行動對應到地點，畫面跟著人走
+  const ACTION_LOC = { study: 'school', martial: 'street', craftl: 'workshop', tradel: 'market', medl: 'clinic', farml: 'town', mentor: 'school', seekjob: 'market', exam: 'school', invest: 'market', project: 'street', meet: 'town', tavern: 'market', seek: 'street', visitf: 'lane', filial: 'home', match: 'home', teach: 'home', homecare: 'home', divorce: 'home', rest: 'home', tonic: 'clinic', doctor: 'clinic', pray: 'town', travel: 'town', charity: 'lane', petition: 'street', write: 'study', invent: 'workshop' };
+  const JOB_LOC = { farm: 'town', craft: 'workshop', weave: 'workshop', trade: 'market', doctor: 'clinic', soldier: 'town', clerk: 'street', teacher: 'school', cleric: 'town', artist: 'study' };
 
   function deltaHtml(ds) {
     return (ds || []).map(d => `<span class="delta ${d.v > 0 ? 'up' : 'down'}">${esc(d.k)}${d.v > 0 ? '+' : ''}${d.v}</span>`).join('');
@@ -236,6 +203,7 @@
     s.loc = ACTION_LOC[id] || (s.job ? JOB_LOC[s.job.id] : 'market') || s.loc;
     const res = G.doAction(s, id);
     if (res) setNarr(res.text, res.deltas);
+    picked = null;
     afterStep();
   }
   function afterStep() {
@@ -244,27 +212,165 @@
     renderAll();
     pumpEvents();
   }
-  $('btnYear').onclick = () => {
+  function passYear() {
     if (s.pending.length) { pumpEvents(); return; }
-    openGroup = null;
+    closeSheet();
     const before = s.log.length;
     G.endYear(s);
     const fresh = s.log.slice(before).filter(l => l.k !== 'life');
     setNarr(fresh.length ? fresh[fresh.length - 1].t : `${s.age} 歲這一年開始了。${s.news || ''}`, []);
     afterStep();
-  };
-  document.querySelectorAll('.tab').forEach(t => { t.onclick = () => { tab = t.dataset.tab; renderRight(); }; });
-  $('btnMenu').onclick = () => { store.set(SAVE, s); home(); };
+  }
+  $('btnYear').onclick = passYear;
+  function renderNav() {
+    $('btnYearT').textContent = s.age < 3 ? '長大一歲' : '過此一年';
+    $('btnYear').classList.toggle('pulse', s.ap <= 0);
+    document.querySelectorAll('.nav[data-nav]').forEach(b => b.classList.toggle('on', sheet === b.dataset.nav));
+  }
+  document.querySelectorAll('.nav[data-nav]').forEach(b => {
+    b.onclick = () => {
+      const k = b.dataset.nav;
+      if (k === 'sys') { openSheet('sys'); return; }
+      if (sheet === k) closeSheet(); else openSheet(k);
+    };
+  });
+  $('relMore').onclick = () => openSheet('family');
+
+  /* ---------- 面板 ---------- */
+  const TITLES = { act: '生活排程', map: '地圖', char: '人物養成', family: '家庭與親友', bag: '行囊', world: '世事', bio: '傳記', sys: '系統' };
+  function openSheet(k) { sheet = k; picked = null; $('sheet').classList.remove('hidden'); renderSheet(); renderNav(); }
+  function closeSheet() { sheet = null; $('sheet').classList.add('hidden'); if (s) renderNav(); }
+  $('sheetClose').onclick = closeSheet;
+  $('sheet').addEventListener('click', e => { if (e.target === $('sheet')) closeSheet(); });
+
+  function renderSheet() {
+    $('sheetTitle').textContent = TITLES[sheet];
+    const body = $('sheetBody');
+    body.className = 'sheet-body k-' + sheet;
+    body.innerHTML = ({ act: actHtml, map: mapHtml, char: charHtml, family: familyHtml, bag: bagHtml, world: worldHtml, bio: bioHtml, sys: sysHtml }[sheet])();
+    bindSheet(body);
+  }
+  function bindSheet(body) {
+    body.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { actTab = b.dataset.tab; picked = null; renderSheet(); }; });
+    body.querySelectorAll('[data-pick]').forEach(b => { b.onclick = () => { picked = b.dataset.pick; renderSheet(); }; });
+    const go = body.querySelector('#doAct');
+    if (go) go.onclick = () => { const id = picked; closeSheet(); act(id); };
+    body.querySelectorAll('[data-go]').forEach(b => { b.onclick = () => { closeSheet(); goPlace(b.dataset.go, false); }; });
+    const h = body.querySelector('#sysHome');
+    if (h) h.onclick = () => { store.set(SAVE, s); closeSheet(); home(); };
+    const y = body.querySelector('#sysYear');
+    if (y) y.onclick = passYear;
+  }
+
+  function actHtml() {
+    const all = G.actionList(s);
+    const list = all.filter(a => a.g === actTab);
+    const thisYear = s.log.filter(l => l.age === s.age).slice(-8);
+    const cal = G.calendar(s);
+    const cur = picked && list.find(a => a.id === picked);
+    return `<div class="sched">
+      <div class="paper-col">
+        <h5>本年行程（${cal.season}．${cal.month}${cal.day}）</h5>
+        <div class="today">${thisYear.length ? thisYear.map(l => `<div><em>${l.k === 'major' ? '要事' : l.k === 'hist' ? '史事' : '日常'}</em>${esc(l.t)}</div>`).join('') : '<p class="muted">這一年還沒有安排。</p>'}</div>
+        <div class="apline">剩餘行動 <b>${s.ap}</b>／${s.apMax}．體力 <b>${Math.round(s.sta ?? 100)}</b></div>
+      </div>
+      <div class="paper-col">
+        <h5>可安排的活動</h5>
+        <div class="gtabs">${GROUPS.map(g => `<button data-tab="${g.id}" class="${g.id === actTab ? 'on' : ''}">${g.n}</button>`).join('')}</div>
+        <div class="acts">${list.map(a => `<button class="arow ${a.id === picked ? 'on' : ''}" data-pick="${a.id}" ${a.off ? 'disabled' : ''}><b>${esc(a.label)}</b><small>${esc(a.off ? a.why : a.hint)}</small><em>${a.sta ? '體力 -' + a.sta : a.id === 'rest' ? '體力 +30' : ''}</em></button>`).join('')}</div>
+        <div class="preview">${cur ? `<h6>預估效果</h6><p>${esc(cur.hint)}．用去一次行動${cur.sta ? `、體力 ${cur.sta}` : ''}</p><button id="doAct" class="btn primary">安排此事</button>` : '<p class="muted">選一件事，看看預估效果。</p>'}</div>
+      </div>
+    </div>`;
+  }
+  function mapHtml() {
+    return `<p class="muted">走到哪裡，畫面就到哪裡；在街上點地名，也能直接安排該處的事。</p><div class="places">${L.PLACES.map(p => `<button class="place ${p.id === s.loc ? 'on' : ''}" data-go="${p.id}"><img src="${L.scene(s, p.id)}" alt="" loading="lazy"><b>${p.id === 'town' ? s.city + '街坊' : p.n}</b></button>`).join('')}</div>`;
+  }
+  function charHtml() {
+    const st = L.stage(s.age);
+    const bar = (n, v, c) => `<div class="sbar"><span>${n}</span><div class="bar ${c}"><span style="width:${pct(v)}%"></span></div><b>${pct(v)}/100</b></div>`;
+    const rows = [];
+    s.projects.forEach(p => rows.push(`${esc(p.n)}${p.done ? '（已落成）' : `（尚需 ${p.left} 年）`}`));
+    s.works.forEach(w => rows.push(esc(w.n)));
+    s.breakthroughs.forEach(id => rows.push(esc(D.BREAKTHROUGHS.find(b => b.id === id).n)));
+    return `<div class="grow">
+      <div class="grow-fig"><img src="${L.player(s)}" alt=""></div>
+      <div class="grow-info">
+        <h4>${esc(s.name)}</h4>
+        <div class="kv2"><label>年齡</label><span>${s.age} 歲</span><label>身分</label><span>${esc(G.curJob(s))}</span><label>朝代</label><span>${esc(G.eraAt(s.year).name)}</span><label>籍貫</label><span>${esc(s.birthCity)}</span></div>
+        <h5>狀態</h5>${bar('健康', s.hp, 'hp')}${bar('心情', s.mood, 'mood')}${bar('體力', s.sta ?? 100, 'sta')}
+        <h5>性格與天賦</h5><p>${esc(s.traits.label)}</p>
+        <h5>身體</h5><p>${s.ills.length ? s.ills.map(i => esc(i.n) + (i.chronic ? '（宿疾）' : '')).join('、') : '目前無病無痛'}</p>
+      </div>
+      <div class="grow-side">
+        <h5>核心能力</h5>${Object.keys(D.SKILLS).map(k => `<div class="sbar"><span>${D.SKILLS[k]}</span><div class="bar sk"><span style="width:${pct(s.skills[k])}%"></span></div><b>${Math.round(s.skills[k])}</b></div>`).join('')}
+        <h5>人生階段</h5>
+        <div class="stages">${L.STAGES.map(([id, n]) => `<div class="${id === st ? 'on' : ''}"><img src="${L.sprite(L.setOf(s.year), L.clsOf(s), s.sex, L.STAGES.find(x => x[0] === id)[2] + 1, true)}" alt=""><span>${n}</span></div>`).join('')}</div>
+        <h5>人生目標</h5>${G.goals(s).map(g => `<div class="goal ${g.done ? 'done' : ''}"><i></i><span>${esc(g.t)}${g.max > 1 ? `（${g.cur}/${g.max}）` : ''}</span></div>`).join('')}
+        <h5>志業</h5><p>${rows.length ? rows.join('、') : '尚未留下什麼'}</p>
+      </div>
+    </div>`;
+  }
+  function familyHtml() {
+    const row = n => `<div class="pp ${n.alive ? '' : 'gone'}"><img src="${L.npc(s, n, true)}" alt=""><div><b>${esc(n.label || '')} ${esc(n.name)}</b><small>${n.age} 歲${n.jobName ? '．' + esc(n.jobName) : ''}${n.blurb ? '．' + esc(n.blurb) : ''}${n.trait ? '．性情' + esc(n.trait) : ''}</small></div><span class="aff">${n.alive ? '親密 ' + Math.round(n.aff) : (n.gone ? n.note || '離去' : '已故')}</span></div>`;
+    const sec = (title, list) => (list.length ? `<div class="sect">${title}</div>${list.map(row).join('')}` : '');
+    const by = rels => s.npcs.filter(n => rels.includes(n.rel));
+    return (sec('婚姻', by(['spouse', 'late', 'ex'])) + sec('子女', by(['child'])) + sec('父母手足', by(['parent', 'sibling'])) + sec('師友', by(['mentor', 'friend', 'figure'])) + sec('對手', by(['rival']))) || '<p class="muted">身邊暫時無人。</p>';
+  }
+  function bagHtml() {
+    const inv = (s.inv || []).map(i => (typeof i === 'string' ? i : i.n)).filter(Boolean);
+    return `<div class="bag"><div class="sect">錢財</div><p class="big">${esc(moneyText(s.money))}</p>
+      <p class="muted">每年的開銷與收成會在過年時結算。</p>
+      <div class="sect">隨身之物</div><p>${inv.length ? inv.map(esc).join('、') : '身無長物'}</p>
+      <div class="sect">著作與事業</div><p>${[...s.works.map(w => w.n), ...s.projects.map(p => p.n + (p.done ? '（已落成）' : '（興建中）'))].map(esc).join('、') || '尚無'}</p>
+      <div class="sect">聲望與德行</div><p>聲望 ${Math.round(s.fame)}．德行 ${Math.round(s.virtue)}</p></div>`;
+  }
+  function worldHtml() {
+    const era = G.eraAt(s.year);
+    const w = s.world;
+    const bar = (n, v) => `<div class="sbar"><span>${n}</span><div class="bar gold"><span style="width:${pct(v)}%"></span></div><b>${Math.round(v)}</b></div>`;
+    const near = D.HISTORY.filter(h => h.y > s.year && h.y <= s.year + 30)[0];
+    const figs = D.FIGURES.filter(f => s.year >= f[1] && s.year <= f[2]).slice(0, 6);
+    const exam = { noble: '世卿世祿', merit: '軍功爵制', chaju: '察舉徵辟', jiupin: '九品中正', keju: '科舉取士', modern: '新式學制與文官考試', none: '科舉暫停，由吏入仕' }[G.examSystem(s.year)];
+    let h = `<div class="sect">當世</div><p>${esc(era.name)}，${esc(s.city)}。${esc(G.dateLabel(s))}。選官之法：${exam}。</p>
+      <div class="sect">世局</div>${bar('安定', w.stable)}${bar('繁榮', w.rich)}${bar('文教', w.learn)}
+      <p class="muted">世局會隨你的作為與時代起伏，也會影響收入、瘟疫與兵禍。</p>
+      <div class="sect">坊間消息</div><p>${esc(s.news || '街坊無事。')}</p>
+      ${near ? `<div class="sect">史書在前</div><p>${near.y - s.year} 年後（${esc(G.yearLabel(near.y))}）將是「${esc(near.title)}」。活到那天，有機會參與其中。</p>` : ''}
+      ${figs.length ? `<div class="sect">當世人物</div><p>${figs.map(f => esc(f[0])).join('、')}</p>` : ''}
+      <div class="sect">史冊</div><p class="muted">你影響史事的力量取決於聲望、官階與本領。目前左右大局的機會約 ${Math.round(G.histChance(s) * 100)}%。</p>`;
+    if (s.div.length) h += s.div.slice().reverse().map(d => `<div class="hcard t${d.tier}"><b>${esc(d.title)}</b>．${esc(G.yearLabel(d.y))}<br>${esc(d.alt)}</div>`).join('');
+    if (s.hist.length) h += s.hist.slice().reverse().map(x => `<div class="lg hist"><em>${x.age} 歲</em>${esc(x.title)}</div>`).join('');
+    return h;
+  }
+  function bioHtml() {
+    return `<p class="muted">此生紀事，最近的在上。</p>` + s.log.slice(-60).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
+  }
+  function sysHtml() {
+    return `<p>進度會在每次行動後自動存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button></div>
+      <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
+  }
 
   /* ---------- 事件卡 ---------- */
   const TAGS = { hist: '史事', bad: '變故', ill: '疾病', family: '家事', life: '人生' };
+  function actorFor(ev) {
+    const id = (ev.id || '') + ' ' + (ev.title || '');
+    const m = [[/thief|賊|盜|bandit/i, 'bandit'], [/levy|corvee|徵|兵|戰/i, 'soldier'], [/beggar|乞/i, 'oldwoman'], [/lostChild|孩|童/i, 'child'], [/debt|債|creditor/i, 'creditor'], [/match|媒|親事/i, 'oldwoman'], [/mentor|師/i, 'elder'], [/windfall|商|rival/i, 'merchant'], [/promote|官|exam|科|上書/i, 'official'], [/pray|僧|寺|道/i, 'monk']];
+    for (const [re, who] of m) if (re.test(id)) return L.evActor(s, who);
+    if (ev.kind === 'ill') return L.evActor(s, 'healer');
+    if (ev.kind === 'hist') return L.evActor(s, 'official');
+    if (ev.kind === 'bad') return L.evActor(s, 'elder');
+    return '';
+  }
   function pumpEvents() {
     const ev = G.top(s);
     if (!ev) { $('modal').classList.add('hidden'); return; }
-    openGroup = null; renderPop();
+    closeSheet();
     $('modal').classList.remove('hidden');
     const card = $('evCard');
     card.className = 'ev-card ' + (ev.kind || 'life');
+    const who = actorFor(ev);
+    $('evActor').classList.toggle('hidden', !who);
+    if (who) $('evActor').src = who;
     $('evTag').textContent = TAGS[ev.kind] || '人生';
     $('evTitle').textContent = ev.title;
     $('evText').textContent = ev.text;
@@ -292,7 +398,6 @@
     store.set(SAVE, s);
     renderAll();
     if (res.text) {
-      // 結果留在卡上，讀完再繼續
       $('evTag').textContent = '後來';
       if (!s.alive) $('evTitle').textContent = '命數已盡';
       $('evText').innerHTML = esc(res.text) + '<br>' + deltaHtml(res.deltas);
@@ -313,6 +418,7 @@
   /* ---------- 結局 ---------- */
   function finishLife() {
     $('modal').classList.add('hidden');
+    closeSheet();
     store.del(SAVE);
     archive(s);
     renderEnding(s);
@@ -331,6 +437,7 @@
     const tl = b.timeline.map(t => `<div class="${t.k}"><em>${esc(G.yearLabel(t.y))}．${t.age} 歲</em><span>${esc(t.t)}</span></div>`).join('');
     const div = b.div.length ? `<h3>可能的另一段歷史</h3>${b.div.map(d => `<div class="div-card t${d.tier}"><b>${esc(d.title)}</b><small>正史：${esc(d.fact)}</small>此生：${esc(d.alt)}</div>`).join('')}` : '';
     $('endBody').innerHTML = `
+      <img class="end-art" src="${L.ending(life)}" alt="">
       <div class="eyebrow">浮生一夢．此生已畢</div>
       <h2>《${esc(life.name)}傳》</h2>
       <p><span class="rank">${esc(b.legacy.n)}</span>${esc(b.title)}．享年 ${life.age} 歲．${esc(life.death.cause)}</p>
@@ -388,8 +495,6 @@
     });
   }
 
-  addEventListener('keydown', e => { if (e.key === 'Escape' && openGroup) togglePop(openGroup); });
-  let resizeT;
-  addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (s && !$('game').classList.contains('hidden')) renderStage(); }, 200); });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && sheet) closeSheet(); });
   home();
 })();

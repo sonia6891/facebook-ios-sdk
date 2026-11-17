@@ -213,7 +213,11 @@
 
   /* ---------- 行動點 ---------- */
   function apFor(age) { return age < 3 ? 0 : age < 7 ? 1 : age < 13 ? 2 : age < 72 ? 3 : age < 82 ? 2 : 1; }
-  function syncAp(s) { s.apMax = apFor(s.age); s.ap = s.apMax; s.season = 0; }
+  function syncAp(s) { s.apMax = apFor(s.age); s.ap = s.apMax; s.season = 0; s.sta = staMax(s); }
+  // 體力：每年依健康與年紀回滿，行動消耗；老病之人一年做不了太多事
+  function staMax(s) { return Math.round(clamp(38 + s.hp * .62 - Math.max(0, s.age - 50) * .6 - s.ills.length * 6, 25, 100)); }
+  const STA_COST = { study: 14, work: 16, social: 9, family: 8, health: 0, world: 15 };
+  const staCost = a => (a.id === 'tonic' || a.id === 'doctor' || a.id === 'pray' ? 4 : a.id === 'rest' ? 0 : STA_COST[a.g] || 10);
   function spend(s) { s.ap = Math.max(0, s.ap - 1); s.season = clamp(s.apMax ? Math.floor((s.apMax - s.ap) / s.apMax * 3) : 0, 0, 3); }
 
   /* ---------- 行動定義 ---------- */
@@ -288,7 +292,9 @@
       if (!reason && a.why) reason = a.why(s) || '';
       const free = typeof a.noAp === 'function' ? a.noAp(s) : a.noAp;
       if (!reason && (!free || a.gate) && s.ap <= 0) reason = '今年的時光已用盡';
-      return { id: a.id, g: a.g, label: tval(a.label, s), hint: tval(a.hint, s), off: !!reason, why: reason };
+      const sta = free ? 0 : staCost(a);
+      if (!reason && sta > (s.sta == null ? 100 : s.sta)) reason = `體力不足（需 ${sta}）`;
+      return { id: a.id, g: a.g, label: tval(a.label, s), hint: tval(a.hint, s), off: !!reason, why: reason, sta };
     });
   }
   function doAction(s, id) {
@@ -297,9 +303,43 @@
     if (!a || !item || item.off || s.pending.length || !s.alive) return null;
     const free = typeof a.noAp === 'function' ? a.noAp(s) : a.noAp;
     if (!free) spend(s);
+    if (s.sta == null) s.sta = staMax(s);
+    s.sta = Math.max(0, s.sta - item.sta);
+    if (id === 'rest') s.sta = Math.min(staMax(s), s.sta + 30);
     const res = a.run(s);
     afterChange(s);
     return res;
+  }
+
+  /* ---------- 當前目標（依年紀與處境推導，不另存狀態） ---------- */
+  function goals(s) {
+    const g = [], sk = s.skills, j = s.job ? JOBS[s.job.id] : null;
+    const add = (t, cur, max) => g.push({ t, cur: Math.min(Math.round(cur), max), max, done: cur >= max });
+    if (s.age < 3) add('平安長到三歲', s.age, 3);
+    else if (s.age < 13) { add('認字讀書：文墨 15', sk.wen, 15); add('身體強健：健康 70', s.hp, 70); }
+    if (s.age >= 6 && s.age < 22) { const k = Object.keys(sk).sort((a, b) => sk[b] - sk[a])[0]; add(`精進${SKILLS[k]}至 30`, sk[k], 30); }
+    if (s.age >= 13 && !s.job) add('謀得一份差事', 0, 1);
+    if (j && s.job.rank < 3) add(`升任${jobName(s, s.job.id, s.job.rank + 1)}`, s.job.xp, 100);
+    if (s.age >= 14 && !spouse(s) && s.age < 40) add('成家立業', 0, 1);
+    if (spouse(s) && s.age < 45 && children(s, true).length < 2) add('延續香火：子女 2 人', children(s, true).length, 2);
+    if (s.age >= 18) add('積蓄 100 ' + coin(s), s.money, 100);
+    if (s.age >= 25) add('聲望 40，名動鄉里', s.fame, 40);
+    if (s.age >= 50) add('著書或興辦事業，留名後世', s.works.length + s.projects.filter(p => p.done).length, 1);
+    return g.slice(0, 4);
+  }
+  /* 月日與天氣：由年份與行動進度決定，存讀檔後一致 */
+  const MONTHS = ['正', '二', '三', '四', '五', '六', '七', '八', '九', '十', '冬', '臘'];
+  const DAYS = ['初一', '初三', '初八', '十二', '十五', '十八', '廿一', '廿五', '廿八'];
+  const WEATHER = [['晴', '☀'], ['晴', '☀'], ['多雲', '☁'], ['微雨', '☂'], ['晴', '☀'], ['陰', '☁']];
+  function calendar(s) {
+    const used = s.apMax ? s.apMax - s.ap : 0;
+    const season = s.apMax > 0 && s.ap <= 0 ? 3 : (s.season || 0);
+    const h = Math.abs((s.year * 31 + s.age * 17 + used * 13) | 0);
+    const m = season * 3 + (h % 3);
+    let w = WEATHER[h % WEATHER.length];
+    if (season === 3 && h % 3 === 0) w = ['小雪', '❄'];
+    if (season === 1 && h % 4 === 0) w = ['驟雨', '☂'];
+    return { month: MONTHS[m] + '月', day: DAYS[(h >> 2) % DAYS.length], season: '春夏秋冬'[season], seasonIdx: season, weather: w[0], icon: w[1] };
   }
 
   function doWork(s) {
@@ -1129,7 +1169,7 @@
     return lines.join('\n');
   }
 
-  const api = { drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
+  const api = { goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.FS_ENGINE = api;
 })(typeof window !== 'undefined' ? window : globalThis);

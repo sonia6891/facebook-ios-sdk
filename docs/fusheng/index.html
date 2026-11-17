@@ -12,38 +12,42 @@
 </head>
 <body>
 <!-- 首頁 -->
-<section id="home" class="screen">
-  <div id="homeArt" class="home-art" aria-hidden="true"></div>
-  <div class="home-card">
-    <div class="eyebrow">一籤入世 · 一念千年</div>
-    <h1>浮生千年</h1>
-    <p>倘若你生在另一個時代，會如何度過一生？從商朝到民國，命運替你抽一個年代、一個城鎮、一戶人家。學藝、謀生、交友、成家，面對疾病與戰亂，走到生命盡頭，留下一篇傳記；也許，還改變了歷史。</p>
-    <div class="home-actions">
-      <button id="btnContinue" class="btn primary hidden">繼續此生</button>
-      <button id="btnQuiz" class="btn primary">開始人格測驗</button>
-      <button id="btnSkip" class="btn">略過測驗．直接抽籤</button>
-      <button id="btnArchive" class="btn ghost">浮生錄</button>
+<section id="home" class="screen ink-screen">
+  <div class="home-wrap">
+    <img class="home-logo" src="assets/ui/TitleLogo.webp" alt="浮生千年">
+    <div class="home-card">
+      <div class="eyebrow">一籤入世 · 一念千年</div>
+      <p>倘若你生在另一個時代，會如何度過一生？從商朝到民國，命運替你抽一個年代、一個城鎮、一戶人家。學藝、謀生、交友、成家，面對疾病與戰亂，走到生命盡頭，留下一篇傳記；也許，還改變了歷史。</p>
+      <div class="home-actions">
+        <button id="btnContinue" class="btn primary hidden">繼續此生</button>
+        <button id="btnQuiz" class="btn primary">開始人格測驗</button>
+        <button id="btnSkip" class="btn">略過測驗．直接抽籤</button>
+        <button id="btnArchive" class="btn ghost">浮生錄</button>
+      </div>
+      <p class="fine">所有年代隨機降生，沒有關卡，也不須解鎖。</p>
     </div>
-    <p class="fine">所有年代隨機降生，沒有關卡，也不須解鎖。</p>
   </div>
 </section>
 
 <!-- 人格測驗 -->
-<section id="quiz" class="screen hidden paper-screen">
-  <div class="paper-card">
-    <div class="eyebrow" id="qProgress"></div>
-    <h2 id="qText"></h2>
+<section id="quiz" class="screen hidden nl-screen">
+  <div class="nl-wrap">
+    <div class="plate"><span id="qProgress"></span></div>
+    <div class="q-panel"><h2 id="qText"></h2></div>
     <div id="qChoices" class="q-choices"></div>
-    <p class="fine">人格會影響傾向，不決定命運。這不是心理診斷。</p>
+    <p class="fine center">人格會影響傾向，不決定命運。這不是心理診斷。</p>
   </div>
 </section>
 
 <!-- 抽籤 -->
-<section id="draw" class="screen hidden paper-screen">
-  <div class="paper-card center">
-    <div class="eyebrow">命運之籤</div>
-    <h2>此生，落入何時何地？</h2>
-    <div id="sticks" class="sticks" aria-hidden="true"></div>
+<section id="draw" class="screen hidden nl-screen">
+  <div class="nl-wrap center">
+    <div class="plate"><span>命運之籤</span></div>
+    <h2 class="draw-q">此生，落入何時何地？</h2>
+    <div class="tube-wrap" aria-hidden="true">
+      <img id="drawStick" class="draw-stick" src="assets/ui/nl_FortuneStick.webp" alt="">
+      <img id="tube" class="tube" src="assets/ui/nl_FortuneCylinder.webp" alt="">
+    </div>
     <div id="fateBox" class="fate"></div>
     <div class="home-actions center">
       <button id="btnDraw" class="btn primary">搖籤</button>
@@ -55,70 +59,83 @@
 
 <!-- 主畫面 HUD -->
 <section id="game" class="screen hidden">
-  <header class="topbar">
-    <div class="top-era">
-      <div class="seal" id="tSeal">宋</div>
-      <div>
-        <div class="top-place"><b id="tPlace"></b><span id="tEra"></span></div>
-        <div class="top-date"><span id="tYear"></span>　<span id="tGanzhi"></span></div>
-      </div>
+  <div id="stage" class="stage" aria-label="場景">
+    <img id="sceneImg" class="scene-img" alt="">
+    <div id="sceneTags" class="scene-tags"></div>
+    <div id="actors" class="actors"></div>
+    <div id="sceneName" class="scene-name"></div>
+  </div>
+
+  <aside class="brand-col" aria-hidden="true">
+    <img src="assets/ui/TitleLogo.webp" alt="">
+    <div class="brand-sub">中華歷史人生養成</div>
+  </aside>
+
+  <header class="topcards">
+    <div class="card c-who">
+      <img id="tHead" class="head-ring" alt="">
+      <div class="who-name"><b id="tName"></b><small id="tFam"></small></div>
+      <div class="kv"><label>年齡</label><span id="tAge"></span><label>身分</label><span id="tJob"></span></div>
     </div>
-    <div class="top-stats">
-      <div class="tstat"><label>年齡</label><b id="tAge"></b></div>
-      <div class="tstat bar"><label>健康 <i id="tHp"></i></label><div class="meter hp"><span id="mHp"></span></div></div>
-      <div class="tstat bar"><label>心境 <i id="tMood"></i></label><div class="meter mood"><span id="mMood"></span></div></div>
-      <div class="tstat"><label id="tCoinLabel">積蓄</label><b id="tMoney"></b></div>
-      <div class="tstat"><label>聲望</label><b id="tFame"></b></div>
-      <div class="tstat"><label>德行</label><b id="tVirtue"></b></div>
+    <div class="card c-era">
+      <div class="kv"><label>朝代</label><span id="tEra"></span><label>地點</label><span id="tPlace"></span></div>
     </div>
-    <div class="top-season">
-      <div id="tSeason" class="season"></div>
+    <div class="card c-vit">
+      <div class="vit"><i class="ic hp">♥</i><label>健康</label><b id="tHp"></b><div class="bar hp"><span id="mHp"></span></div></div>
+      <div class="vit"><i class="ic mood">☺</i><label>心情</label><b id="tMood"></b><div class="bar mood"><span id="mMood"></span></div></div>
+      <div class="vit"><i class="ic sta">ϟ</i><label>體力</label><b id="tSta"></b><div class="bar sta"><span id="mSta"></span></div></div>
+    </div>
+    <div class="card c-money"><i class="ic coin">◎</i><label id="tCoinLabel">銀錢</label><b id="tMoney"></b></div>
+    <div class="card c-date">
+      <div class="season" id="tSeason"></div>
+      <div><div id="tDay" class="day"></div><div id="tWeather" class="weather"></div></div>
       <div id="tAp" class="ap" title="今年剩餘行動"></div>
-      <button id="btnMenu" class="iconbtn" aria-label="離開到首頁">返回</button>
     </div>
   </header>
 
-  <div class="hud">
-    <aside class="panel left" aria-label="人物">
-      <div class="who">
-        <div id="pPortrait" class="pframe"></div>
-        <div class="who-t">
-          <h3 id="pName"></h3>
-          <div id="pJob" class="job"></div>
-          <div id="pFamily" class="muted"></div>
-          <div id="pTraits" class="muted"></div>
-        </div>
-      </div>
-      <h4>技藝</h4>
-      <div id="pSkills" class="skills"></div>
-      <h4>身體</h4>
-      <div id="pIlls" class="ills"></div>
-      <h4>志業</h4>
-      <div id="pProjects" class="legacy-list"></div>
-    </aside>
+  <aside class="side left">
+    <div class="card list">
+      <h4 class="ribbon">當前目標</h4>
+      <div id="goals" class="goals"></div>
+    </div>
+    <div class="card list">
+      <h4 class="ribbon">事件提示</h4>
+      <div id="hints" class="hints"></div>
+    </div>
+  </aside>
 
-    <main class="stage-wrap">
-      <div id="stage" class="stage"></div>
-      <div id="floaters" class="floaters" aria-live="polite"></div>
-      <div id="narr" class="narr"></div>
-    </main>
+  <aside class="side right">
+    <div class="card list">
+      <h4 class="ribbon">能力一覽</h4>
+      <div id="skills" class="skills"></div>
+    </div>
+    <div class="card list">
+      <h4 class="ribbon">關係</h4>
+      <div id="rels" class="rels"></div>
+      <button id="relMore" class="more">更多…</button>
+    </div>
+  </aside>
 
-    <aside class="panel right" aria-label="世事">
-      <div class="tabs" role="tablist">
-        <button data-tab="people" class="tab on" role="tab">親友</button>
-        <button data-tab="world" class="tab" role="tab">世事</button>
-        <button data-tab="chron" class="tab" role="tab">紀事</button>
-        <button data-tab="hist" class="tab" role="tab">史冊</button>
-      </div>
-      <div id="tabBody" class="tab-body"></div>
-    </aside>
+  <div id="narr" class="narr" aria-live="polite"></div>
+
+  <nav class="navbar" aria-label="主選單">
+    <button class="nav" data-nav="act"><span class="ring"><i class="glyph">行</i></span><b>行動</b></button>
+    <button class="nav" data-nav="map"><span class="ring"><img src="assets/ui/ico_map.webp" alt=""></span><b>地圖</b></button>
+    <button class="nav" data-nav="char"><span class="ring"><img src="assets/ui/ico_char.webp" alt=""></span><b>人物</b></button>
+    <button class="nav" data-nav="family"><span class="ring"><img src="assets/ui/ico_family.webp" alt=""></span><b>家庭</b></button>
+    <button class="nav" data-nav="bag"><span class="ring"><img src="assets/ui/ico_bag.webp" alt=""></span><b>行囊</b></button>
+    <button class="nav" data-nav="world"><span class="ring"><i class="glyph">世</i></span><b>世事</b></button>
+    <button class="nav" data-nav="bio"><span class="ring"><img src="assets/ui/ico_bio.webp" alt=""></span><b>傳記</b></button>
+    <button class="nav" data-nav="sys"><span class="ring"><i class="glyph">⚙</i></span><b>系統</b></button>
+    <button id="btnYear" class="nav year"><span class="ring"><i class="glyph">歲</i></span><b id="btnYearT">過此一年</b></button>
+  </nav>
+
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-card">
+      <div class="sheet-head"><h3 id="sheetTitle"></h3><button id="sheetClose" class="x" aria-label="關閉">×</button></div>
+      <div id="sheetBody" class="sheet-body"></div>
+    </div>
   </div>
-
-  <footer class="actions">
-    <div id="actBar" class="act-bar"></div>
-    <button id="btnYear" class="btn-year"></button>
-  </footer>
-  <div id="actPop" class="act-pop hidden" role="menu"></div>
 </section>
 
 <!-- 結局 -->
@@ -134,18 +151,21 @@
 <!-- 事件卡 -->
 <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="evTitle">
   <div id="evCard" class="ev-card">
-    <div id="evTag" class="ev-tag"></div>
-    <h3 id="evTitle"></h3>
-    <p id="evText"></p>
-    <input id="evInput" class="ev-input hidden" maxlength="6" autocomplete="off">
-    <div id="evChoices" class="ev-choices"></div>
+    <img id="evActor" class="ev-actor" alt="">
+    <div class="ev-main">
+      <div id="evTag" class="ev-tag"></div>
+      <h3 id="evTitle"></h3>
+      <p id="evText"></p>
+      <input id="evInput" class="ev-input hidden" maxlength="6" autocomplete="off">
+      <div id="evChoices" class="ev-choices"></div>
+    </div>
   </div>
 </div>
 
 <noscript><p style="padding:24px">這個遊戲需要啟用 JavaScript。</p></noscript>
 <script src="js/data.js"></script>
 <script src="js/engine.js"></script>
-<script src="js/art.js"></script>
+<script src="js/look.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>
