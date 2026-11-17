@@ -263,6 +263,13 @@ img { display: block; }
 .arc { padding: 9px 0; border-bottom: 1px dashed #d9cba8; line-height: 1.6; }
 .arc b { font-size: 16px; }
 
+.persona { color: var(--ochre-d); letter-spacing: .1em; }
+.fate b.persona.inline { display: inline; font-size: inherit; margin: 0; }
+.heirs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.heir { display: grid; justify-items: center; gap: 2px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); min-width: 108px; }
+.heir:hover { border-color: var(--ochre); background: #f6e7c4; }
+.heir img { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; border: 2px solid var(--wood); background: var(--paper3); }
+.heir small { color: var(--ink3); font-size: 12px; }
 /* 中等寬度：收窄側欄 */
 @media (max-width: 1240px) and (min-width: 901px) {
   #game { --brand: 96px; }
