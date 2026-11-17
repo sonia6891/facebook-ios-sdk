@@ -84,11 +84,11 @@ img { display: block; }
 .kv label, .kv2 label { font-size: 12px; padding: 0 7px; border-radius: 4px; background: #e9dcc0; color: var(--ink2); letter-spacing: .1em; white-space: nowrap; }
 .kv span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .c-who { flex: 1.6; }
-.c-who .kv { flex: none; margin-left: auto; }
+.c-who .kv { flex: none; }
 .head-ring { width: 54px; height: 54px; flex: none; border-radius: 50%; object-fit: cover; object-position: 50% 20%; background: var(--paper3); border: 2px solid var(--wood); box-shadow: 0 0 0 2px var(--paper2), 0 0 0 3px var(--line); }
-.who-name { min-width: 0; }
+.who-name { min-width: 0; flex: 1; overflow: hidden; }
 .who-name b { display: block; font-size: 19px; letter-spacing: .08em; white-space: nowrap; }
-.who-name small { font-size: 12px; color: var(--ink3); white-space: nowrap; }
+.who-name small { display: block; font-size: 12px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .c-era { flex: 1.35; }
 .c-vit { flex: 1.5; gap: 12px !important; }
 .vit { display: grid; grid-template-columns: auto auto 1fr; gap: 0 5px; align-items: center; flex: 1; min-width: 0; font-size: 13px; }
