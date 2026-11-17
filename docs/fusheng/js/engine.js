@@ -150,6 +150,12 @@
     return n;
   }
   const npc = (s, id) => s.npcs.find(n => n.id === id);
+  // 親友的記憶：他們記得你做過的事（最多留六件），顯示在家庭面板，也影響日後往來
+  function remember(s, n, text) {
+    if (!n) return;
+    (n.mem = n.mem || []).push({ y: s.year, age: s.age, t: text });
+    if (n.mem.length > 6) n.mem.shift();
+  }
   const spouse = s => (s.spouseId ? npc(s, s.spouseId) : null);
   const children = (s, alive) => s.npcs.filter(n => n.rel === 'child' && (!alive || n.alive));
   const parents = s => s.npcs.filter(n => n.rel === 'parent' && n.alive);
@@ -468,7 +474,7 @@
     return say(s, `你竟有緣拜會${f[0]}（${f[4]}），一席話勝讀十年書。`, { [skill]: 8, fame: 6, mood: 8 }, 'major');
   }
   function doFilial(s) {
-    parents(s).forEach(p => { p.aff = clamp(p.aff + 6, 0, 100); });
+    parents(s).forEach(p => { p.aff = clamp(p.aff + 6, 0, 100); remember(s, p, '你回家奉養，陪在身邊'); });
     return say(s, pick(s, ['你替父母分憂，老人家眼裡有了笑意。', '飯桌上一家人說了好久的話。']), { virtue: 3, mood: 3, money: -2 });
   }
   function doMatch(s) {
@@ -478,7 +484,7 @@
       return null;
     }
     const sp = spouse(s);
-    sp.aff = clamp(sp.aff + 8, 0, 100);
+    sp.aff = clamp(sp.aff + 8, 0, 100); remember(s, sp, '你放下手邊的事，好好陪了一陣');
     s.flags.intimate = 2;
     return say(s, pick(s, [`你與${sp.name}閒話家常，彼此更貼心了。`, `一同看了場戲，${sp.name}笑得很開心。`]), { mood: 8, money: -1 });
   }
@@ -494,7 +500,7 @@
   const STATUS = ['貧戶', '小戶', '殷實人家', '書香門第', '官宦世家'];
   function doTeach(s) {
     const kids = children(s, true).filter(c => c.age < 18 && c.age > 2);
-    kids.forEach(c => { c.edu = clamp((c.edu || 0) + 6 + s.skills.wen / 12, 0, 100); c.aff = clamp(c.aff + 4, 0, 100); });
+    kids.forEach(c => { c.edu = clamp((c.edu || 0) + 6 + s.skills.wen / 12, 0, 100); c.aff = clamp(c.aff + 4, 0, 100); remember(s, c, '你親自教讀書識字'); });
     return say(s, `你耐心教${kids.map(k => k.name).slice(0, 3).join('、')}識字明理。`, { mood: 5, virtue: 1 });
   }
   function doPetition(s) {
@@ -728,7 +734,7 @@
   E('childSchool', { title: '子女啟蒙', text: (s, c) => `${npc(s, c.id).name}到了啟蒙的年紀。`, kind: 'family', choices: (s, c) => [
     { t: '送去讀書', hint: '花費 6', req: st => st.money >= 6, fx: st => { const k = npc(st, c.id); k.edu = clamp(k.edu + 18, 0, 100); return say(st, `你送${k.name}去讀書。`, { money: -6, mood: 3, virtue: 1 }); } },
     { t: '帶在身邊學本事', hint: '傳授家學', fx: st => { const k = npc(st, c.id); k.edu = clamp(k.edu + 10, 0, 100); k.fromParent = true; return say(st, `你把一身本事教給${k.name}。`, { mood: 4 }); } },
-    { t: '先幫家裡幹活', hint: '省錢，孩子少學', fx: st => { const k = npc(st, c.id); k.aff = clamp(k.aff - 5, 0, 100); return say(st, `${k.name}早早開始幫家裡幹活。`, { money: 3 }); } }
+    { t: '先幫家裡幹活', hint: '省錢，孩子少學', fx: st => { const k = npc(st, c.id); k.aff = clamp(k.aff - 5, 0, 100); remember(st, k, '小時候沒能上學，早早幫家裡幹活'); return say(st, `${k.name}早早開始幫家裡幹活。`, { money: 3 }); } }
   ] });
   E('childFuture', { title: '兒女前程', text: (s, c) => { const k = npc(s, c.id); return `${k.name}長大成人了。接下來要走哪一條路？`; }, kind: 'family', choices: (s, c) => {
     const k = npc(s, c.id);
@@ -768,9 +774,9 @@
     { t: '維持朋友情誼', hint: '情誼 +5', fx: st => { const n = npc(st, c.id); n.aff = clamp(n.aff + 5, 0, 100); return say(st, `你和${n.name}依舊以朋友相稱。`, { mood: -2 }); } }
   ] });
   E('friendNeed', { title: '友人有難', text: (s, c) => `${npc(s, c.id).name}${pick(s, ['家裡遭了官司', '欠下一筆債', '遇到了難處'])}，上門來向你求助。`, choices: (s, c) => [
-    { t: '傾囊相助', hint: '花費 15', req: st => st.money >= 15, fx: st => { const n = npc(st, c.id); n.aff = clamp(n.aff + 25, 0, 100); n.owes = true; return say(st, `你拿出積蓄幫了${n.name}，對方紅了眼眶。`, { money: -15, virtue: 5, mood: 3, fame: 2 }); } },
-    { t: '幫忙出主意', hint: '情誼 +8', fx: st => { const n = npc(st, c.id); n.aff = clamp(n.aff + 8, 0, 100); return say(st, `你陪著${n.name}想了一夜的辦法。`, { virtue: 2 }); } },
-    { t: '愛莫能助', hint: '情誼大減', fx: st => { const n = npc(st, c.id); n.aff = clamp(n.aff - 18, 0, 100); return say(st, `你婉拒了${n.name}，心裡也不好受。`, { mood: -3, virtue: -2 }); } }
+    { t: '傾囊相助', hint: '花費 15', req: st => st.money >= 15, fx: st => { const n = npc(st, c.id); n.aff = clamp(n.aff + 25, 0, 100); n.owes = true; remember(st, n, '落難時你傾囊相助'); return say(st, `你拿出積蓄幫了${n.name}，對方紅了眼眶。`, { money: -15, virtue: 5, mood: 3, fame: 2 }); } },
+    { t: '幫忙出主意', hint: '情誼 +8', fx: st => { const n = npc(st, c.id); n.aff = clamp(n.aff + 8, 0, 100); remember(st, n, '你陪著想了一夜的辦法'); return say(st, `你陪著${n.name}想了一夜的辦法。`, { virtue: 2 }); } },
+    { t: '愛莫能助', hint: '情誼大減', fx: st => { const n = npc(st, c.id); n.aff = clamp(n.aff - 18, 0, 100); remember(st, n, '求助時你婉拒了'); return say(st, `你婉拒了${n.name}，心裡也不好受。`, { mood: -3, virtue: -2 }); } }
   ] });
   E('rival', { title: '同行相忌', text: (s, c) => `同行${c.name}處處與你較勁，在外說了不少風涼話。`, choices: (s, c) => [
     { t: '正面較量', hint: '比本事', fx: st => { addNpc(st, { name: c.name, sex: c.sex, age: st.age + ri(st, -8, 8), rel: 'rival', label: '對手', aff: 10, status: 2 }); return say(st, `你與${c.name}成了對手，看誰笑到最後。`, { fame: 2, mood: -1 }); } },
@@ -824,8 +830,8 @@
     { t: '揮手走開', fx: s => say(s, '你皺皺眉頭，快步離開了。', null) }
   ] });
   E('childQuestion', { title: '親子之間', text: (s, c) => `${npc(s, c.id).name}${pick(s, ['跟你頂了嘴', '想去遠方闖蕩', '說不想走你安排的路'])}。`, kind: 'family', choices: (s, c) => [
-    { t: '好好談談', hint: '親情 +12', fx: st => { const k = npc(st, c.id); k.aff = clamp(k.aff + 12, 0, 100); return say(st, `你和${k.name}坐下來談，彼此都紅了眼眶。`, { mood: 4 }); } },
-    { t: '嚴加管教', hint: '親情下降，學識增加', fx: st => { const k = npc(st, c.id); k.aff = clamp(k.aff - 10, 0, 100); k.edu = clamp((k.edu || 0) + 6, 0, 100); return say(st, `你狠狠訓了${k.name}一頓。`, { mood: -3 }); } }
+    { t: '好好談談', hint: '親情 +12', fx: st => { const k = npc(st, c.id); k.aff = clamp(k.aff + 12, 0, 100); remember(st, k, '你肯坐下來聽他說話'); return say(st, `你和${k.name}坐下來談，彼此都紅了眼眶。`, { mood: 4 }); } },
+    { t: '嚴加管教', hint: '親情下降，學識增加', fx: st => { const k = npc(st, c.id); k.aff = clamp(k.aff - 10, 0, 100); remember(st, k, '那次你狠狠訓了一頓'); k.edu = clamp((k.edu || 0) + 6, 0, 100); return say(st, `你狠狠訓了${k.name}一頓。`, { mood: -3 }); } }
   ] });
   E('exposed', { title: '身分被識破', text: '有人察覺了你的女兒身，當眾揭穿，四周一片譁然。', kind: 'bad', choices: () => [
     { t: '坦然承認', hint: '失去職位，名聲兩極', fx: s => { s.disguise = false; const old = curJob(s); s.job = null; s.flags.entered = false; return say(s, `你當眾承認了，${old}的差事沒了，但也有人佩服你的膽識。`, { fame: 12, mood: -10, virtue: 2 }, 'major'); } },
@@ -941,6 +947,10 @@
       if (sp && sp.job && sp.job !== 'home') s.money += 3 + sp.status;
       // 產業進項：亂世歉收，盛世多得
       (s.assets || []).forEach(a => { s.money += Math.round(a.income * (.55 + s.world.stable / 220 + s.world.rich / 400)); s.mood = clamp(s.mood + (a.mood || 0), 0, 100); });
+      if (s.money < 0) {
+        const debtor = s.npcs.find(n => n.alive && !n.gone && n.owes);
+        if (debtor) { debtor.owes = false; s.money += 18; remember(s, debtor, '你落難時，他把當年的恩情還了'); s.log.push({ y: s.year, age: s.age, t: `${debtor.name}聽說你手頭緊，送來一筆錢，說是還當年的恩情。`, k: 'life' }); }
+      }
       if (s.money < 0) {
         const lacking = -s.money;
         s.mood = clamp(s.mood - 3 - lacking / 10, 0, 100);
@@ -1233,7 +1243,7 @@
     return lines.join('\n');
   }
 
-  const api = { persona, heirs, continueAs, goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
+  const api = { remember, persona, heirs, continueAs, goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.FS_ENGINE = api;
 })(typeof window !== 'undefined' ? window : globalThis);

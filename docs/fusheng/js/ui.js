@@ -4,12 +4,58 @@
   const G = window.FS_ENGINE, D = window.FS_DATA, L = window.FS_LOOK;
   const $ = id => document.getElementById(id);
   const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const SAVE = 'fusheng.save.v2', ARCHIVE = 'fusheng.archive.v2';
+  const SAVE = 'fusheng.save.v2', ARCHIVE = 'fusheng.archive.v2', ACHKEY = 'fusheng.ach.v1';
+  // 桌面版（Steam）會提供 fsDesktop：把存檔另寫成檔案供雲端同步、解鎖 Steam 成就、全螢幕與離開
+  const desk = window.fsDesktop || null;
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 無痕或停用儲存時，遊戲仍可玩 */ } },
-    del(k) { try { localStorage.removeItem(k); } catch (e) { /* 同上 */ } }
+    set(k, v) { const j = JSON.stringify(v); try { localStorage.setItem(k, j); } catch (e) { /* 無痕或停用儲存時，遊戲仍可玩 */ } if (desk) desk.mirror(k, j); },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* 同上 */ } if (desk) desk.mirror(k, null); }
   };
+  // 換了電腦、瀏覽器存檔是空的，就從桌面版的存檔檔案讀回來
+  if (desk) [SAVE, ARCHIVE, ACHKEY].forEach(k => { try { if (localStorage.getItem(k) == null) { const j = desk.load(k); if (j) localStorage.setItem(k, j); } } catch (e) { /* 讀不到就當作新玩家 */ } });
+
+  /* ---------- 成就 ---------- */
+  const ACH = [
+    ['first_life', '初入人間', '走完第一世', (l, done) => done],
+    ['long_life', '古稀之年', '活到七十歲', l => l.age >= 70],
+    ['official', '金榜題名', '通過選官考核，踏入仕途', l => !!l.flags.entered],
+    ['wealthy', '家財萬貫', '積蓄達到 500', l => l.money >= 500],
+    ['landlord', '良田美宅', '名下產業達五處', l => (l.assets || []).length >= 5],
+    ['family', '兒孫滿堂', '養育四名子女', l => l.npcs.filter(n => n.rel === 'child').length >= 4],
+    ['lineage', '三代傳家', '家族延續到第三代', l => (l.gen || 1) >= 3],
+    ['author', '著書立說', '留下一部著作', l => l.works.length >= 1],
+    ['builder', '造福鄉里', '完成一項地方事業', l => l.projects.some(p => p.done)],
+    ['friends', '名士之交', '結識三位當世名士', l => l.met.length >= 3],
+    ['virtue', '德高望重', '德行達到 60', l => l.virtue >= 60],
+    ['history', '改寫歷史', '左右一件載入史冊的大事', l => l.div.some(d => d.tier >= 2)],
+    ['legend', '扭轉乾坤', '徹底改變一件大事的結局', l => l.div.some(d => d.tier >= 3)],
+    ['eras5', '五朝過客', '在五個不同時代走完人生', () => new Set((store.get(ARCHIVE) || []).map(x => x.eraId)).size >= 5],
+    ['eras21', '千年一夢', '二十一個時代都走過一世', () => new Set((store.get(ARCHIVE) || []).map(x => x.eraId)).size >= D.ERAS.length]
+  ];
+  function checkAch(life, done) {
+    const got = store.get(ACHKEY) || {};
+    let fresh = false;
+    ACH.forEach(([id, n, d, test]) => {
+      if (got[id]) return;
+      let ok = false;
+      try { ok = !!test(life, done); } catch (e) { ok = false; }
+      if (!ok) return;
+      got[id] = Date.now(); fresh = true;
+      toast(`成就解鎖：${n}`, d);
+      if (desk) desk.unlock(id);
+    });
+    if (fresh) store.set(ACHKEY, got);
+  }
+  let toastT;
+  function toast(title, sub) {
+    let el = $('toast');
+    if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    el.innerHTML = `<b>${esc(title)}</b><small>${esc(sub || '')}</small>`;
+    el.classList.add('on');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => el.classList.remove('on'), 3600);
+  }
 
   let answers = [], fate = null, s = null, sheet = null, actTab = 'study', picked = null;
   const GROUPS = [
@@ -28,7 +74,9 @@
   function home() {
     show('home');
     $('btnContinue').classList.toggle('hidden', !store.get(SAVE));
+    $('btnExit').classList.toggle('hidden', !desk);
   }
+  $('btnExit').onclick = () => { if (desk) desk.quit(); };
   $('btnContinue').onclick = () => {
     const saved = store.get(SAVE);
     if (saved && saved.v === 2) { s = saved; if (!s.loc || !L.PLACES.some(p => p.id === s.loc)) s.loc = 'town'; enterGame(); }
@@ -209,6 +257,7 @@
   function afterStep() {
     store.set(SAVE, s);
     if (!s.alive) { finishLife(); return; }
+    checkAch(s, false);
     renderAll();
     pumpEvents();
   }
@@ -273,6 +322,10 @@
         s = d; store.set(SAVE, s); closeSheet(); enterGame();
       }).catch(() => { body.querySelector('#sysMsg').textContent = '這個檔案不是可用的存檔。'; });
     };
+    const fu = body.querySelector('#sysFull');
+    if (fu) fu.onclick = () => desk.fullscreen();
+    const exit = body.querySelector('#sysExit');
+    if (exit) exit.onclick = () => { store.set(SAVE, s); desk.quit(); };
     const q = body.querySelector('#sysQuit');
     if (q) q.onclick = () => {
       if (q.dataset.sure) { store.del(SAVE); closeSheet(); home(); }
@@ -329,7 +382,7 @@
     </div>`;
   }
   function familyHtml() {
-    const row = n => `<div class="pp ${n.alive ? '' : 'gone'}"><img src="${L.npc(s, n, true)}" alt=""><div><b>${esc(n.label || '')} ${esc(n.name)}</b><small>${n.age} 歲${n.jobName ? '．' + esc(n.jobName) : ''}${n.blurb ? '．' + esc(n.blurb) : ''}${n.trait ? '．性情' + esc(n.trait) : ''}</small></div><span class="aff">${n.alive ? '親密 ' + Math.round(n.aff) : (n.gone ? n.note || '離去' : '已故')}</span></div>`;
+    const row = n => `<div class="pp ${n.alive ? '' : 'gone'}"><img src="${L.npc(s, n, true)}" alt=""><div><b>${esc(n.label || '')} ${esc(n.name)}</b><small>${n.age} 歲${n.jobName ? '．' + esc(n.jobName) : ''}${n.blurb ? '．' + esc(n.blurb) : ''}${n.trait ? '．性情' + esc(n.trait) : ''}${(n.mem || []).length ? `<br><i class="mem">記得：${n.mem.slice(-2).map(m => esc(m.t)).join('；')}</i>` : ''}</small></div><span class="aff">${n.alive ? '親密 ' + Math.round(n.aff) : (n.gone ? n.note || '離去' : '已故')}</span></div>`;
     const sec = (title, list) => (list.length ? `<div class="sect">${title}</div>${list.map(row).join('')}` : '');
     const by = rels => s.npcs.filter(n => rels.includes(n.rel));
     return (sec('婚姻', by(['spouse', 'late', 'ex'])) + sec('子女', by(['child'])) + sec('父母手足', by(['parent', 'sibling'])) + sec('師友', by(['mentor', 'friend', 'figure'])) + sec('對手', by(['rival']))) || '<p class="muted">身邊暫時無人。</p>';
@@ -366,7 +419,7 @@
     return `<p class="muted">此生紀事，最近的在上。</p>` + s.log.slice(-60).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
   }
   function sysHtml() {
-    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysQuit" class="btn ghost">放棄此生</button></div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
+    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
       <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
   }
 
@@ -441,6 +494,7 @@
     closeSheet();
     store.del(SAVE);
     archive(s);
+    checkAch(s, true);
     renderEnding(s);
   }
   function archive(life) {
@@ -523,6 +577,8 @@
       <p class="muted">只是記錄，不影響抽籤：每個時代隨時都可能抽到，也沒有需要解鎖的內容。</p>
       <div class="eras">${D.ERAS.map(e => `<div class="${seen.has(e.id) ? 'on' : ''}">${esc(e.name)}</div>`).join('')}</div>
       ${list.length ? list.map((x, i) => `<div class="arc"><b>${esc(x.name)}</b>　${esc(x.era)}．${esc(x.city)}．享年 ${x.age} 歲．${esc(x.rank)}<br><span class="muted">${esc(x.title)}．${esc(x.cause)}</span><br><button class="btn ghost" data-read="${i}" style="padding:4px 10px;margin-top:5px;font-size:13px">讀傳記</button></div>`).join('') : '<p>還沒有走完任何一世。</p>'}
+      <h3>成就（${Object.keys(store.get(ACHKEY) || {}).length}／${ACH.length}）</h3>
+      <div class="achs">${ACH.map(([id, n, d]) => `<div class="${(store.get(ACHKEY) || {})[id] ? 'on' : ''}"><b>${esc(n)}</b><small>${esc(d)}</small></div>`).join('')}</div>
       <div id="arcRead"></div>
       <div class="home-actions"><button id="arcHome" class="btn primary">回首頁</button></div>`;
     $('arcHome').onclick = home;
