@@ -135,6 +135,7 @@
   function enterGame() {
     show('game');
     closeSheet();
+    fxSeason = -1;
     renderAll();
     setNarr(s.age === 0 ? '你睜開眼睛，來到了這個世上。' : `${s.age} 歲的你，回到了${s.city}。`, []);
     pumpEvents();
@@ -220,8 +221,60 @@
     const comp = companion();
     $('actors').innerHTML = `<img class="actor me" src="${L.player(s)}" alt="${esc(s.name)}" style="--h:${heightOf(s.age)}">` +
       (comp ? `<img class="actor npc" src="${L.npc(s, comp)}" alt="${esc(comp.name)}" title="${esc((comp.label || '') + ' ' + comp.name)}" style="--h:${heightOf(comp.age)}">` : '');
+    $('crowd').innerHTML = crowdOf(comp);
+    $('stage').dataset.loc = ['town', 'street', 'lane', 'market'].includes(s.loc) ? 'out' : 'in';
+    renderFx();
   }
   const heightOf = age => (age < 3 ? .5 : age < 10 ? .66 : age < 16 ? .84 : 1).toString();
+  // 場景裡的其他人：先放你認識的人，再補上街坊。位置是 [左右%, 離底部 vh, 大小]，越遠的越小。
+  const SLOTS = {
+    town: [[40, 31, .52], [65, 31, .5], [17, 26, .52], [86, 27, .5], [46, 37, .38]],
+    market: [[27, 25, .62], [71, 25, .62], [39, 31, .5], [62, 32, .48]],
+    street: [[29, 27, .56], [72, 26, .58], [60, 33, .44]],
+    lane: [[31, 26, .58], [69, 28, .54]],
+    school: [[33, 26, .55], [67, 26, .55], [58, 32, .44]],
+    workshop: [[69, 25, .6], [31, 28, .54]],
+    home: [[29, 23, .7], [73, 23, .7]],
+    study: [[71, 23, .66]], clinic: [[71, 23, .66]]
+  };
+  function crowdOf(comp) {
+    const set = L.setOf(s.year), seed = [...(s.city + s.loc)].reduce((n, c) => n + c.charCodeAt(0), Math.abs(s.year));
+    const known = rels => s.npcs.filter(n => n.alive && !n.gone && rels.includes(n.rel) && n !== comp).map(n => ({ src: L.npc(s, n), age: n.age, title: `${n.label || ''} ${n.name}` }));
+    const ev = who => ({ src: L.evActor(s, who), age: 30 });
+    const anyone = i => { const sex = (seed + i) % 2 ? 'm' : 'f', age = [24, 44, 62, 12, 34][(seed + i * 3) % 5], cls = ['poor', 'middle', 'poor', 'gentry'][(seed + i) % 4]; return { src: L.sprite(set, cls, sex, age), age }; };
+    let list;
+    switch (s.loc) {
+      case 'home': list = known(['spouse', 'parent', 'child', 'sibling']); break;
+      case 'market': list = [ev('merchant'), ...known(['friend']), anyone(1), anyone(2), anyone(3)]; break;
+      case 'street': list = [ev('official'), ev('soldier'), anyone(4)]; break;
+      case 'lane': list = [ev('child'), ev('oldwoman'), ...known(['friend'])]; break;
+      case 'school': list = [{ src: L.sprite(set, 'middle', 'm', 13), age: 13 }, { src: L.sprite(set, 'poor', 'm', 8), age: 8 }, { src: L.sprite(set, 'gentry', 'm', 14), age: 14 }]; break;
+      case 'workshop': list = [{ src: L.sprite(set, 'poor', 'm', 45), age: 45 }, { src: L.sprite(set, 'poor', 'f', 30), age: 30 }]; break;
+      case 'clinic': list = [ev('healer')]; break;
+      case 'study': list = known(['mentor']); break;
+      default: list = [ev('elder'), anyone(1), s.year >= 67 ? ev('monk') : anyone(5), ...known(['friend']), anyone(2), anyone(3)];
+    }
+    const slots = SLOTS[s.loc] || [];
+    return list.filter(x => x.src).slice(0, slots.length).map((x, i) => {
+      const [left, bottom, size] = slots[i];
+      return `<img class="bystander" src="${x.src}" alt="" ${x.title ? `title="${esc(x.title)}"` : ''} style="left:${left}%;bottom:${bottom}vh;--h:${(size * Number(heightOf(x.age))).toFixed(2)};--d:${(i * .7).toFixed(1)}s">`;
+    }).join('');
+  }
+  // 四季：春落花、夏螢火、秋落葉、冬飄雪
+  let fxSeason = -1;
+  function renderFx() {
+    const k = G.calendar(s).seasonIdx;
+    if (k === fxSeason) return;
+    fxSeason = k;
+    const n = [14, 9, 14, 22][k];
+    let h = '';
+    for (let i = 0; i < n; i++) {
+      const r = (i * 9301 + 49297) % 233280 / 233280, r2 = (i * 4099 + 12345) % 9973 / 9973;
+      h += `<i style="left:${(r * 100).toFixed(1)}%;--delay:${(-r2 * 14).toFixed(1)}s;--dur:${(9 + r * 9).toFixed(1)}s;--sway:${(r2 * 60 - 30).toFixed(0)}px;--size:${(6 + r2 * 7).toFixed(0)}px;top:${k === 1 ? (30 + r2 * 45).toFixed(0) + '%' : '-4%'}"></i>`;
+    }
+    $('fx').className = 'fx s' + k;
+    $('fx').innerHTML = h;
+  }
   function companion() {
     const by = rels => s.npcs.find(n => n.alive && !n.gone && rels.includes(n.rel));
     if (s.age < 10) return by(['parent']);
