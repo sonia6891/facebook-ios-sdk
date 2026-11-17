@@ -331,6 +331,9 @@
   function goals(s) {
     const g = [], sk = s.skills, j = s.job ? JOBS[s.job.id] : null;
     const add = (t, cur, max) => g.push({ t, cur: Math.min(Math.round(cur), max), max, done: cur >= max });
+    const am = ambition(s);
+    if (am && s.amb.stage < 3) g.push({ t: `志向「${am.n}」：${am.steps[s.amb.stage][0]}`, cur: s.amb.stage, max: 3, done: false, amb: true });
+    else if (am) g.push({ t: `志向「${am.n}」已得償所願`, cur: 3, max: 3, done: true, amb: true });
     if (s.age < 3) add('平安長到三歲', s.age, 3);
     else if (s.age < 13) { add('認字讀書：文墨 15', sk.wen, 15); add('身體強健：健康 70', s.hp, 70); }
     if (s.age >= 6 && s.age < 22) { const k = Object.keys(sk).sort((a, b) => sk[b] - sk[a])[0]; add(`精進${SKILLS[k]}至 30`, sk[k], 30); }
@@ -668,6 +671,86 @@
     fx: st => { if (st.ap > 0) spend(st); (st.assets = st.assets || []).push({ id: e.id, n: e.n, income: e.income, mood: e.mood || 0, y: st.year }); return say(st, `你置下了${e.n}。${e.line}`, { money: -e.cost, fame: 1 }, 'major'); }
   })).concat([{ t: '再看看', fx: () => ({ text: '錢要花在刀口上，你決定再等等。', deltas: [] }) }]) });
 
+
+  /* ---------- 人生志向：十二歲立志，三個階段，各有獎賞 ---------- */
+  const jobAt = (s, id, rank) => !!s.job && s.job.id === id && s.job.rank >= rank;
+  const AMBITIONS = [
+    { id: 'official', n: '入仕為官', d: '讀書應試，走上仕途', steps: [['文墨達到 40', s => s.skills.wen >= 40], ['通過選官，踏入仕途', s => !!s.flags.entered], ['官至高位', s => jobAt(s, 'clerk', 3)]] },
+    { id: 'rich', n: '富甲一方', d: '經營積蓄，置產興家', steps: [['積蓄達到 150', s => s.money >= 150], ['名下產業三處', s => (s.assets || []).length >= 3], ['積蓄達到 600', s => s.money >= 600]] },
+    { id: 'healer', n: '懸壺濟世', d: '學醫救人，積德行善', steps: [['醫術達到 40', s => s.skills.yi >= 40], ['成為獨當一面的醫者', s => jobAt(s, 'doctor', 2)], ['德行達到 60', s => s.virtue >= 60]] },
+    { id: 'general', n: '沙場立功', d: '習武從戎，以軍功揚名', steps: [['武藝達到 40', s => s.skills.wu >= 40], ['在軍中升為將校', s => jobAt(s, 'soldier', 2)], ['聲望達到 80', s => s.fame >= 80]] },
+    { id: 'artisan', n: '匠心獨具', d: '精研技藝，留下巧思', steps: [['匠藝達到 40', s => s.skills.gong >= 40], ['成為一方名匠', s => jobAt(s, 'craft', 2) || jobAt(s, 'weave', 2)], ['完成一項創制或著作', s => s.breakthroughs.length + s.works.length >= 1]] },
+    { id: 'teacher', n: '桃李天下', d: '治學授徒，著書傳世', steps: [['文墨達到 45', s => s.skills.wen >= 45], ['成為受人敬重的師長', s => jobAt(s, 'teacher', 2)], ['留下一部著作', s => s.works.length >= 1]] },
+    { id: 'family', n: '家和萬事興', d: '成家育兒，守護一家', steps: [['成家', s => !!spouse(s)], ['養育三名子女', s => children(s).length >= 3], ['六十歲時兒女在側', s => s.age >= 60 && children(s, true).length >= 2]] },
+    { id: 'free', n: '逍遙一生', d: '廣交朋友，隨心而活', steps: [['結交三位朋友', s => friends(s).length >= 3], ['結識兩位當世名士', s => s.met.length >= 2], ['活到七十，心境仍佳', s => s.age >= 70 && s.mood >= 60]] }
+  ];
+  const ambition = s => (s.amb ? AMBITIONS.find(a => a.id === s.amb.id) : null);
+  E('ambition', { title: '少年立志', text: s => `${s.age} 歲了。往後的日子想往哪裡走？立下志向之後，每達成一步都有回報；人生無常，沒走到底也不要緊。`, choices: () => AMBITIONS.map(a => ({
+    t: a.n, hint: `${a.d}：${a.steps.map(x => x[0]).join(' → ')}`,
+    fx: st => { st.amb = { id: a.id, stage: 0 }; return say(st, `你在心裡立下志向：${a.n}。`, { mood: 4 }, 'major'); }
+  })) });
+  function ambitionYear(s) {
+    if (!s.amb && s.age >= 12 && !s.pending.some(e => e.id === 'ambition')) { pushEvent(s, 'ambition', {}); return; }
+    const a = ambition(s);
+    if (!a) return;
+    while (s.amb.stage < 3 && a.steps[s.amb.stage][1](s)) {
+      const n = ++s.amb.stage;
+      const done = n === 3;
+      const res = say(s, done ? `你得償所願：「${a.n}」這條路，你走到了盡頭。` : `志向「${a.n}」更進一步：${a.steps[n - 1][0]}。`, { mood: done ? 20 : 10, fame: n * 4, money: n * 8 }, 'major');
+      (s.cheer = s.cheer || []).push({ t: done ? `得償所願：${a.n}` : `志向達成第 ${n} 步`, d: a.steps[n - 1][0] });
+      if (res) s.lastCheer = s.year;
+    }
+  }
+
+  /* ---------- 才能：技藝練到 30、60 各解鎖一項，之後每年都有好處 ---------- */
+  const PERKS = [
+    { id: 'wen1', k: 'wen', at: 30, n: '識文斷字', d: '每年心境 +2', fx: { mood: 2 } },
+    { id: 'wen2', k: 'wen', at: 60, n: '下筆成章', d: '每年聲望 +1、心境 +2', fx: { fame: 1, mood: 2 } },
+    { id: 'wu1', k: 'wu', at: 30, n: '筋骨強健', d: '每年健康 +1', fx: { hp: 1 } },
+    { id: 'wu2', k: 'wu', at: 60, n: '百戰之身', d: '每年健康 +2', fx: { hp: 2 } },
+    { id: 'gong1', k: 'gong', at: 30, n: '巧手', d: '每年積蓄 +3', fx: { money: 3 } },
+    { id: 'gong2', k: 'gong', at: 60, n: '一代大匠', d: '每年積蓄 +8', fx: { money: 8 } },
+    { id: 'shang1', k: 'shang', at: 30, n: '精打細算', d: '每年積蓄 +4', fx: { money: 4 } },
+    { id: 'shang2', k: 'shang', at: 60, n: '長袖善舞', d: '每年積蓄 +10，產業多三成進項', fx: { money: 10 }, estate: .3 },
+    { id: 'yi1', k: 'yi', at: 30, n: '略通醫理', d: '每年健康 +1', fx: { hp: 1 } },
+    { id: 'yi2', k: 'yi', at: 60, n: '妙手回春', d: '每年健康 +2、德行 +1', fx: { hp: 2, virtue: 1 } },
+    { id: 'nong1', k: 'nong', at: 30, n: '知天時', d: '每年積蓄 +3', fx: { money: 3 } },
+    { id: 'nong2', k: 'nong', at: 60, n: '倉廩充實', d: '每年積蓄 +6、心境 +2', fx: { money: 6, mood: 2 } }
+  ];
+  const perksOf = s => PERKS.filter(p => (s.perks || []).includes(p.id));
+  function perkYear(s) {
+    s.perks = s.perks || [];
+    PERKS.forEach(p => {
+      if (s.perks.includes(p.id) || s.skills[p.k] < p.at) return;
+      s.perks.push(p.id);
+      say(s, `${SKILLS[p.k]}有成，你領悟了「${p.n}」：${p.d}。`, { mood: 5 }, 'major');
+      (s.cheer = s.cheer || []).push({ t: `領悟才能：${p.n}`, d: p.d });
+    });
+    if (s.age < 12) return;
+    perksOf(s).forEach(p => {
+      eff(s, p.fx);
+      if (p.estate) s.money += Math.round((s.assets || []).reduce((n, a) => n + a.income, 0) * p.estate);
+    });
+  }
+
+  /* ---------- 人生評分：讓每一世可以互相比較 ---------- */
+  function lifeScore(s) {
+    const parts = [
+      ['壽數', s.age],
+      ['聲望', Math.round(Math.min(200, s.fame))],
+      ['德行', Math.round(Math.max(0, s.virtue) * .6)],
+      ['家業', Math.round(Math.min(120, Math.max(0, s.money) / 5) + (s.assets || []).length * 8)],
+      ['家人', children(s).length * 8 + (s.npcs.some(n => ['spouse', 'late'].includes(n.rel)) ? 10 : 0)],
+      ['志向', (s.amb ? s.amb.stage : 0) * 40],
+      ['才能', (s.perks || []).length * 6],
+      ['著作與事業', s.works.length * 15 + s.projects.filter(p => p.done).length * 15 + s.breakthroughs.length * 30],
+      ['史冊', s.div.reduce((n, d) => n + [0, 10, 40, 90][d.tier], 0) + s.met.length * 5]
+    ];
+    const total = parts.reduce((n, p) => n + p[1], 0);
+    const grade = total >= 800 ? '甲上' : total >= 620 ? '甲' : total >= 460 ? '乙' : total >= 300 ? '丙' : total >= 150 ? '丁' : '戊';
+    return { total, grade, parts: parts.filter(p => p[1] > 0) };
+  }
+
   const BOOK_KIND = { wen: '詩文集', wu: '兵法論', gong: '工藝圖說', shang: '貨殖錄', yi: '醫方集', nong: '農書' };
   E('bookChoice', { title: '著書立說', text: '你想留下什麼樣的文字？一部書要花一整年心血。', choices: s => Object.keys(SKILLS).filter(k => s.skills[k] >= 35 && !s.works.some(w => w.kind === k)).map(k => ({
     t: BOOK_KIND[k], hint: `以${SKILLS[k]}（${Math.round(s.skills[k])}）為本`,
@@ -930,6 +1013,8 @@
     careerYear(s);
     projectYear(s);
     milestones(s);
+    perkYear(s);
+    ambitionYear(s);
     worldNews(s);
     rollEvents(s);
     afterChange(s);
@@ -1243,7 +1328,7 @@
     return lines.join('\n');
   }
 
-  const api = { remember, persona, heirs, continueAs, goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
+  const api = { AMBITIONS, PERKS, ambition, perksOf, lifeScore, remember, persona, heirs, continueAs, goals, calendar, staMax, reignLabel, drawFate, newLife, resolve, top, endYear, doAction, actionList, eraAt, ganzhi, zodiac, yearLabel, dateLabel, curJob, spouse, children, parents, friends, npc, histChance, examSystem, coin, maxHp, bioText, legacyRank, jobName, EVENTS, ACTIONS, STATUS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.FS_ENGINE = api;
 })(typeof window !== 'undefined' ? window : globalThis);
