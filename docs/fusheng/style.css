@@ -60,15 +60,37 @@ img { display: block; }
 
 /* ===== 主畫面 ===== */
 #game { position: relative; height: 100vh; overflow: hidden; background: #f7f1e4; --brand: 132px; }
-.stage { position: absolute; inset: 0 0 0 var(--brand); overflow: hidden; background: #f8f3e8; }
-.scene-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 60%; transition: opacity .35s; }
+.stage { position: absolute; inset: 0 0 0 var(--brand); overflow: hidden; background:
+  radial-gradient(ellipse at 18% 78%, rgba(196, 110, 82, .10), transparent 46%),
+  radial-gradient(ellipse at 84% 70%, rgba(143, 169, 155, .16), transparent 50%),
+  linear-gradient(#e9eef0 0%, #f3ecda 34%, #efe3c6 70%, #e2d2ab 100%); }
+/* 遠山：水墨山水墊在場景後面，讓留白的地方有遠景 */
+.stage::before { content: ""; position: absolute; inset: 0 0 38% 0; background: url(assets/ui/TimeRiver_1920x1080.webp) center 62% / cover; opacity: .62; -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent); }
+/* 地面：暖色淡彩，人物不再踩在一片白上 */
+.stage::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46%; pointer-events: none; background:
+  radial-gradient(ellipse 70% 60% at 50% 100%, rgba(139, 111, 83, .30), transparent 70%),
+  linear-gradient(to top, rgba(217, 197, 154, .85), rgba(217, 197, 154, .35) 55%, transparent); }
+.stage[data-loc="in"]::before { opacity: .28; }
+.stage[data-loc="in"]::after { background: linear-gradient(to top, rgba(196, 164, 122, .9), rgba(217, 197, 154, .5) 50%, transparent); }
+.scene-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 60%; transition: opacity .35s; mix-blend-mode: multiply; z-index: 1; }
+.scene-name, .scene-tags { z-index: 3; }
 .scene-img.fade { opacity: 0; }
 .scene-name { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); padding: 2px 16px; font-size: 13px; letter-spacing: .3em; color: var(--jade); background: rgba(251, 247, 236, .7); border-radius: 20px; white-space: nowrap; }
 .scene-tags { position: absolute; inset: 0; }
 .ptag { position: absolute; transform: translate(-50%, -50%); width: 104px; height: 30px; padding: 0 0 0 16px; border: 0; background: url(assets/ui/Place_Tag.webp) center / 100% 100%; font-size: 14px; font-weight: 600; letter-spacing: .2em; color: var(--jade); filter: drop-shadow(0 2px 3px rgba(70, 54, 30, .25)); transition: transform .12s, filter .12s; }
 .ptag:hover { transform: translate(-50%, -56%) scale(1.06); filter: drop-shadow(0 4px 6px rgba(70, 54, 30, .35)) brightness(1.05); }
 .ptag.back { width: 128px; margin-top: 44px; }
-.actors { position: absolute; left: 0; right: 0; bottom: 118px; display: flex; justify-content: center; align-items: flex-end; gap: 3vw; pointer-events: none; }
+.crowd { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.bystander { position: absolute; height: calc(var(--h, .5) * 36vh); width: auto; translate: -50% 0; filter: drop-shadow(0 4px 3px rgba(70, 54, 30, .2)) saturate(.92); animation: breathe 3.6s ease-in-out infinite alternate; animation-delay: var(--d, 0s); transform-origin: 50% 100%; pointer-events: auto; }
+.fx { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.fx i { position: absolute; width: var(--size); height: var(--size); animation: fall var(--dur) linear var(--delay) infinite; }
+.fx.s0 i { background: #f1b9c0; border-radius: 80% 0 80% 0; opacity: .85; }
+.fx.s2 i { background: #c98a4b; border-radius: 0 70% 0 70%; opacity: .8; }
+.fx.s3 i { background: #fff; border-radius: 50%; box-shadow: 0 0 3px rgba(120, 140, 160, .7); width: calc(var(--size) * .6); height: calc(var(--size) * .6); }
+.fx.s1 i { background: #f3e58a; border-radius: 50%; width: 4px; height: 4px; box-shadow: 0 0 8px 3px rgba(243, 229, 138, .6); animation: glow var(--dur) ease-in-out var(--delay) infinite alternate; }
+@keyframes fall { from { transform: translate(0, -5vh) rotate(0); } to { transform: translate(var(--sway), 108vh) rotate(420deg); } }
+@keyframes glow { from { transform: translate(0, 0); opacity: 0; } 50% { opacity: .9; } to { transform: translate(var(--sway), -40px); opacity: .15; } }
+.actors { z-index: 3; position: absolute; left: 0; right: 0; bottom: 118px; display: flex; justify-content: center; align-items: flex-end; gap: 3vw; pointer-events: none; }
 .actor { height: calc(var(--h, 1) * 36vh); width: auto; filter: drop-shadow(0 6px 5px rgba(70, 54, 30, .22)); animation: breathe 3.2s ease-in-out infinite alternate; transform-origin: 50% 100%; }
 .actor.npc { height: calc(var(--h, 1) * 31vh); opacity: .96; animation-delay: -1.4s; }
 @keyframes breathe { from { transform: scaleY(1); } to { transform: scaleY(1.012); } }
@@ -308,6 +330,7 @@ img { display: block; }
   .stage { position: relative; inset: auto; order: 2; height: 46vh; min-height: 280px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .scene-name { top: 8px; }
   .actors { bottom: 8px; }
+  .bystander { height: calc(var(--h, .5) * 22vh); margin-bottom: -12vh; }
   .actor { height: calc(var(--h, 1) * 22vh); }
   .actor.npc { height: calc(var(--h, 1) * 19vh); }
   .scene-tags { display: flex; flex-wrap: wrap; gap: 5px 4px; justify-content: center; align-content: flex-start; padding: 34px 6px 0; }
