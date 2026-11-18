@@ -91,6 +91,9 @@
     $('btnExit').classList.toggle('hidden', !desk);
   }
   $('btnExit').onclick = () => { if (desk) desk.quit(); };
+  const LANG = window.FS_LANG || { t: x => x, toggle() {}, other: () => '' };
+  $('btnLang').textContent = LANG.other();
+  $('btnLang').onclick = () => LANG.toggle();
   $('btnContinue').onclick = () => {
     const saved = store.get(SAVE);
     if (saved && saved.v === 2) { s = saved; if (!s.loc || !L.PLACES.some(p => p.id === s.loc)) s.loc = 'town'; enterGame(); }
@@ -421,6 +424,8 @@
     const md = body.querySelector('#sysMode'), am = body.querySelector('#sysAmb');
     if (md) md.onclick = () => { AU.nextMode(); renderSheet(); };
     if (am) am.onclick = () => { AU.set('amb', !AU.get('amb')); renderSheet(); };
+    const lg = body.querySelector('#sysLang');
+    if (lg) lg.onclick = () => { store.set(SAVE, s); LANG.toggle(); };
     const tu = body.querySelector('#sysTut');
     if (tu) tu.onclick = () => { closeSheet(); startTut(true); };
     body.querySelectorAll('[data-vol]').forEach(r => { r.oninput = () => { AU.setVol(r.dataset.vol, r.value / 100); r.nextElementSibling.textContent = r.value; }; r.onchange = () => { if (r.dataset.vol === 'sfx') AU.play('good'); }; });
@@ -600,7 +605,7 @@
     return `<p class="muted">此生紀事，最近的在上。</p>` + s.log.slice(-60).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
   }
   function sysHtml() {
-    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysMusic" class="btn">音樂：${AU.get('music') ? '開' : '關'}</button><button id="sysMode" class="btn">配樂：${esc(AU.modeName())}</button><button id="sysSfx" class="btn">音效：${AU.get('sfx') ? '開' : '關'}</button><button id="sysAmb" class="btn">環境聲：${AU.get('amb') ? '開' : '關'}</button><button id="sysTut" class="btn">重看新手引導</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><div class="vols">${[['music', '音樂音量'], ['sfx', '音效音量'], ['amb', '環境聲音量']].map(([k, n]) => `<label>${n}<input type="range" min="0" max="100" step="5" value="${Math.round(AU.vol(k) * 100)}" data-vol="${k}"><b>${Math.round(AU.vol(k) * 100)}</b></label>`).join('')}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
+    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysMusic" class="btn">音樂：${AU.get('music') ? '開' : '關'}</button><button id="sysMode" class="btn">配樂：${esc(AU.modeName())}</button><button id="sysSfx" class="btn">音效：${AU.get('sfx') ? '開' : '關'}</button><button id="sysAmb" class="btn">環境聲：${AU.get('amb') ? '開' : '關'}</button><button id="sysTut" class="btn">重看新手引導</button><button id="sysLang" class="btn" data-raw>${esc(LANG.other())}</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><div class="vols">${[['music', '音樂音量'], ['sfx', '音效音量'], ['amb', '環境聲音量']].map(([k, n]) => `<label>${n}<input type="range" min="0" max="100" step="5" value="${Math.round(AU.vol(k) * 100)}" data-vol="${k}"><b>${Math.round(AU.vol(k) * 100)}</b></label>`).join('')}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
       <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。音效、環境聲與「城鎮曲」「靜謐曲」取自《古人有嘻哈》專案。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
   }
 
@@ -763,7 +768,7 @@
         <button id="btnHome" class="btn ghost">回首頁</button>
       </div>
       <p class="fine">人物與個人遭遇為遊戲虛構；歷史事件取材自史實，上古年份為約數，「偏移」內容屬假想。</p>`;
-    bioButtons(G.bioText(life), life.name);
+    bioButtons(LANG.t(G.bioText(life)), LANG.t(life.name));
     setTimeout(() => AU.play('bell'), 1800);
     $('btnAgain').onclick = () => { answers = []; openDraw(); };
     $('btnHome').onclick = home;
@@ -803,7 +808,7 @@
     $('btnSaveTxt').onclick = () => {
       const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
       const a = document.createElement('a');
-      a.href = url; a.download = `浮生千年_${name}傳.txt`; a.click();
+      a.href = url; a.download = LANG.t(`浮生千年_${name}傳.txt`); a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
   }
