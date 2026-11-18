@@ -6,6 +6,7 @@
   font-family: "Noto Serif TC", "Songti TC", "PMingLiU", "Microsoft JhengHei", serif;
   color: var(--ink);
 }
+html[lang="zh-Hans"] { font-family: "Noto Serif SC", "Noto Serif TC", "Songti SC", "SimSun", "Microsoft YaHei", serif; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--paper); }
 button { font: inherit; color: inherit; cursor: pointer; }

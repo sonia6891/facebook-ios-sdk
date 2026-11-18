@@ -8,22 +8,28 @@ fs.rmSync(dst, { recursive: true, force: true });
 fs.mkdirSync(dst, { recursive: true });
 for (const f of ['index.html', 'style.css', 'js', 'assets']) fs.cpSync(path.join(src, f), path.join(dst, f), { recursive: true });
 
-const fontPkg = path.join(__dirname, 'node_modules', '@fontsource', 'noto-serif-tc');
+// 繁體用 Noto Serif TC，簡體用 Noto Serif SC；兩套都放進去，切換語言不用連網
 const weights = ['400', '600', '700', '900'];
-if (fs.existsSync(fontPkg)) {
+const fontPkgs = ['noto-serif-tc', 'noto-serif-sc'].map(n => path.join(__dirname, 'node_modules', '@fontsource', n)).filter(p => fs.existsSync(p));
+if (fontPkgs.length) {
   const out = path.join(dst, 'fonts');
   fs.mkdirSync(path.join(out, 'files'), { recursive: true });
+  const links = [];
   let n = 0;
-  for (const w of weights) {
-    fs.copyFileSync(path.join(fontPkg, `${w}.css`), path.join(out, `${w}.css`));
-    for (const f of fs.readdirSync(path.join(fontPkg, 'files'))) {
-      if (f.includes(`-${w}-normal.woff2`)) { fs.copyFileSync(path.join(fontPkg, 'files', f), path.join(out, 'files', f)); n++; }
+  for (const pkg of fontPkgs) {
+    const tag = path.basename(pkg).slice(-2); // tc 或 sc
+    for (const w of weights) {
+      fs.copyFileSync(path.join(pkg, `${w}.css`), path.join(out, `${tag}-${w}.css`));
+      links.push(`<link rel="stylesheet" href="fonts/${tag}-${w}.css">`);
+      for (const f of fs.readdirSync(path.join(pkg, 'files'))) {
+        if (f.includes(`-${w}-normal.woff2`)) { fs.copyFileSync(path.join(pkg, 'files', f), path.join(out, 'files', f)); n++; }
+      }
     }
   }
   const page = path.join(dst, 'index.html');
   let html = fs.readFileSync(page, 'utf8');
-  html = html.replace(/<link rel="preconnect"[^>]*>\s*/g, '').replace(/<link href="https:\/\/fonts\.googleapis\.com[^>]*>\s*/, weights.map(w => `<link rel="stylesheet" href="fonts/${w}.css">`).join('\n') + '\n');
+  html = html.replace(/<link rel="preconnect"[^>]*>\s*/g, '').replace(/<link href="https:\/\/fonts\.googleapis\.com[^>]*>\s*/, links.join('\n') + '\n');
   fs.writeFileSync(page, html);
-  console.log(`已內建字型 ${n} 個檔案`);
+  console.log(`已內建字型 ${n} 個檔案（${fontPkgs.length} 套）`);
 } else console.log('找不到字型套件，改用系統字型（先執行 npm install）');
 console.log('已同步遊戲內容到', dst);
