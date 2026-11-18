@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const G = window.FS_ENGINE, D = window.FS_DATA, L = window.FS_LOOK;
-  const AU = window.FS_AUDIO || { play() {}, set() {}, get() { return false; }, ambience() {}, nextMode() { return ''; }, modeName() { return ''; } };
+  const AU = window.FS_AUDIO || { play() {}, set() {}, get() { return false; }, ambience() {}, nextMode() { return ''; }, modeName() { return ''; }, vol() { return 1; }, setVol() {} };
   const oddsTag = v => (v == null ? '' : `<span class="odds ${v >= 65 ? 'hi' : v >= 40 ? 'mid' : 'lo'}">成功率 ${v}%</span>`);
   const $ = id => document.getElementById(id);
   const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -421,6 +421,9 @@
     const md = body.querySelector('#sysMode'), am = body.querySelector('#sysAmb');
     if (md) md.onclick = () => { AU.nextMode(); renderSheet(); };
     if (am) am.onclick = () => { AU.set('amb', !AU.get('amb')); renderSheet(); };
+    const tu = body.querySelector('#sysTut');
+    if (tu) tu.onclick = () => { closeSheet(); startTut(true); };
+    body.querySelectorAll('[data-vol]').forEach(r => { r.oninput = () => { AU.setVol(r.dataset.vol, r.value / 100); r.nextElementSibling.textContent = r.value; }; r.onchange = () => { if (r.dataset.vol === 'sfx') AU.play('good'); }; });
     const fu = body.querySelector('#sysFull');
     if (fu) fu.onclick = () => desk.fullscreen();
     const exit = body.querySelector('#sysExit');
@@ -597,8 +600,52 @@
     return `<p class="muted">此生紀事，最近的在上。</p>` + s.log.slice(-60).reverse().map(l => `<div class="lg ${l.k}"><em>${l.age} 歲</em>${esc(l.t)}</div>`).join('');
   }
   function sysHtml() {
-    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysMusic" class="btn">音樂：${AU.get('music') ? '開' : '關'}</button><button id="sysMode" class="btn">配樂：${esc(AU.modeName())}</button><button id="sysSfx" class="btn">音效：${AU.get('sfx') ? '開' : '關'}</button><button id="sysAmb" class="btn">環境聲：${AU.get('amb') ? '開' : '關'}</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
+    return `<p>進度會在每次行動後自動存檔在這個瀏覽器裡。換裝置或清除瀏覽資料前，可以先匯出存檔。</p><div class="home-actions"><button id="sysYear" class="btn primary">${s.age < 3 ? '長大一歲' : '過此一年'}</button><button id="sysHome" class="btn">存檔並回首頁</button><button id="sysExport" class="btn">匯出存檔</button><button id="sysImport" class="btn">匯入存檔</button><button id="sysMusic" class="btn">音樂：${AU.get('music') ? '開' : '關'}</button><button id="sysMode" class="btn">配樂：${esc(AU.modeName())}</button><button id="sysSfx" class="btn">音效：${AU.get('sfx') ? '開' : '關'}</button><button id="sysAmb" class="btn">環境聲：${AU.get('amb') ? '開' : '關'}</button><button id="sysTut" class="btn">重看新手引導</button><button id="sysQuit" class="btn ghost">放棄此生</button>${desk ? '<button id="sysFull" class="btn">切換全螢幕</button><button id="sysExit" class="btn">存檔並離開遊戲</button>' : ''}</div><div class="vols">${[['music', '音樂音量'], ['sfx', '音效音量'], ['amb', '環境聲音量']].map(([k, n]) => `<label>${n}<input type="range" min="0" max="100" step="5" value="${Math.round(AU.vol(k) * 100)}" data-vol="${k}"><b>${Math.round(AU.vol(k) * 100)}</b></label>`).join('')}</div><input id="sysFile" type="file" accept="application/json,.json" class="hidden"><p id="sysMsg" class="muted" style="margin-top:8px"></p>
       <p class="fine">美術取自《浮生千年》Unity 專案：目前畫好前秦（漢晉）與唐兩組人物與場景，其他時代暫借最接近的一組。音效、環境聲與「城鎮曲」「靜謐曲」取自《古人有嘻哈》專案。人物與個人遭遇為遊戲虛構；歷史事件取材自史實，「偏移」內容屬假想。</p>`;
+  }
+
+
+  /* ---------- 新手引導：第一次進遊戲時一步步指給你看，之後可在「系統」重看 ---------- */
+  const TUTKEY = 'fusheng.tut.v1';
+  const TUT = [
+    ['', '歡迎來到這一世', '你會從出生一路活到老。每一年可以做幾件事，做完就過到下一年。接下來用幾步帶你認識畫面。'],
+    ['.topcards', '你的狀態', '上方是姓名、年齡、朝代與所在地，以及健康、心情、體力和錢財。健康歸零，這一世就結束了。'],
+    ['.side.left', '目標與提示', '左邊是眼前可以努力的目標，以及需要留意的事。十二歲時會請你立下人生志向。'],
+    ['.side.right', '能力與關係', '右邊是六種技藝和最親近的人。技藝練到 30 和 60 會領悟才能；點人名可以去找他。'],
+    ['#stage', '場景與人', '中間是你所在的地方。點地名會走過去；點認識的人可以聊天、送禮、幫忙。'],
+    ['.nav[data-nav="act"]', '安排行動', '按「行動」選今年要做的事：學習、工作、社交、家庭、養生、世事。每件事會用掉一次行動和一些體力。'],
+    ['#btnYear', '過此一年', '行動用完（或不想再做）就按這裡。新的一年會有新的遭遇。三歲以前還不能行動，直接按它長大。'],
+    ['', '就這樣，去過你的一生吧', '沒有標準答案。平凡過一生也好，名留青史也好，結束時都會留下一篇傳記。']
+  ];
+  let tutStep = -1;
+  function startTut(force) {
+    if (tutStep >= 0 || (!force && store.get(TUTKEY))) return;
+    if ($('game').classList.contains('hidden') || !$('modal').classList.contains('hidden')) return;
+    closeSheet();
+    tutStep = 0; renderTut();
+  }
+  function endTut() { tutStep = -1; store.set(TUTKEY, 1); const el = $('tut'); if (el) el.remove(); document.querySelectorAll('.tut-hot').forEach(x => x.classList.remove('tut-hot')); }
+  function renderTut() {
+    let el = $('tut');
+    if (!el) { el = document.createElement('div'); el.id = 'tut'; el.className = 'tut'; document.body.appendChild(el); }
+    document.querySelectorAll('.tut-hot').forEach(x => x.classList.remove('tut-hot'));
+    const [sel, title, text] = TUT[tutStep];
+    const target = sel ? document.querySelector(sel) : null;
+    el.innerHTML = `<div class="tut-ring"></div><div class="tut-card"><small>${tutStep + 1}／${TUT.length}</small><h4>${esc(title)}</h4><p>${esc(text)}</p><div class="home-actions"><button id="tutNext" class="btn primary">${tutStep === TUT.length - 1 ? '開始' : '下一步'}</button>${tutStep < TUT.length - 1 ? '<button id="tutSkip" class="btn ghost">略過</button>' : ''}</div></div>`;
+    // 說明卡放在被指的東西旁邊，不擋住它
+    const ring = el.firstElementChild, card = el.lastElementChild;
+    el.classList.toggle('plain', !target);
+    if (target) {
+      const r = target.getBoundingClientRect(), w = Math.min(380, innerWidth - 24), h = card.offsetHeight;
+      const pad = 6;
+      ring.style.cssText = `left:${Math.max(0, r.left - pad)}px;top:${Math.max(0, r.top - pad)}px;width:${Math.min(innerWidth, r.width + pad * 2)}px;height:${Math.min(innerHeight, r.height + pad * 2)}px`;
+      const below = r.bottom + h + 16 < innerHeight, above = r.top - h - 16 > 0;
+      card.style.left = Math.max(12, Math.min(innerWidth - w - 12, r.left + r.width / 2 - w / 2)) + 'px';
+      card.style.top = (below ? r.bottom + 12 : above ? r.top - h - 12 : Math.max(12, innerHeight / 2 - h / 2)) + 'px';
+      if (!below && !above) card.style.left = (r.left > innerWidth / 2 ? Math.max(12, r.left - w - 16) : Math.min(innerWidth - w - 12, r.right + 16)) + 'px';
+    } else { card.style.left = '50%'; card.style.top = '50%'; card.style.transform = 'translate(-50%, -50%)'; }
+    $('tutNext').onclick = () => { if (tutStep >= TUT.length - 1) endTut(); else { tutStep++; renderTut(); } };
+    const sk = $('tutSkip'); if (sk) sk.onclick = endTut;
   }
 
   /* ---------- 事件卡 ---------- */
@@ -614,7 +661,7 @@
   }
   function pumpEvents() {
     const ev = G.top(s);
-    if (!ev) { $('modal').classList.add('hidden'); return; }
+    if (!ev) { $('modal').classList.add('hidden'); startTut(false); return; }
     closeSheet();
     if ($('modal').classList.contains('hidden')) AU.play('paper');
     $('modal').classList.remove('hidden');

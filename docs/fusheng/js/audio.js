@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
   const KEY = 'fusheng.audio.v1', DIR = 'assets/audio/';
-  let conf = { music: true, sfx: true, amb: true, mode: 'synth' };
+  let conf = { music: true, sfx: true, amb: true, mode: 'synth', vmusic: 1, vsfx: 1, vamb: 1 };
   try { conf = Object.assign(conf, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) { /* 用預設值 */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(conf)); } catch (e) { /* 存不了也照常播放 */ } };
   const MODES = [['synth', '撥弦（即時彈奏）'], ['city', '城鎮曲'], ['calm', '靜謐曲']];
@@ -28,7 +28,7 @@
     if (!base) return false;
     // 同一個音效可能連續觸發，複製一份才不會互相打斷
     const a = base.paused ? base : base.cloneNode();
-    a.volume = VOL[name] || .5;
+    a.volume = Math.min(1, (VOL[name] || .5) * conf.vsfx);
     try { a.currentTime = 0; } catch (e) { /* 還沒載入完成 */ }
     const p = a.play();
     if (p && p.catch) p.catch(() => { broken[name] = true; synth(name); });
@@ -117,13 +117,14 @@
   let ambName = '';
   function applyMusic() {
     const on = conf.music;
-    loop('bgm', on && conf.mode === 'city' ? 'bgm_city' : on && conf.mode === 'calm' ? 'bgm_calm' : '', .32);
+    loop('bgm', on && conf.mode === 'city' ? 'bgm_city' : on && conf.mode === 'calm' ? 'bgm_calm' : '', .32 * conf.vmusic);
     if (ensure()) {
-      musicGain.gain.setTargetAtTime(on && conf.mode === 'synth' ? .5 : 0, ctx.currentTime, .3);
+      musicGain.gain.setTargetAtTime(on && conf.mode === 'synth' ? .5 * conf.vmusic : 0, ctx.currentTime, .3);
+      sfxGain.gain.setTargetAtTime(.7 * conf.vsfx, ctx.currentTime, .05);
       if (on && conf.mode === 'synth' && !timer) timer = setInterval(tick, 900);
     }
   }
-  function applyAmb() { loop('amb', conf.amb ? ambName : '', .22); }
+  function applyAmb() { loop('amb', conf.amb ? ambName : '', .22 * conf.vamb); }
 
   /* ---------- 對外 ---------- */
   function play(name) {
@@ -142,6 +143,8 @@
     applyMusic();
     return modeName();
   }
+  function setVol(kind, v) { conf['v' + kind] = Math.max(0, Math.min(1, v)); save(); if (kind === 'music' || kind === 'sfx') applyMusic(); if (kind === 'amb') applyAmb(); }
+  const vol = kind => (conf['v' + kind] == null ? 1 : conf['v' + kind]);
   const modeName = () => (MODES.find(m => m[0] === conf.mode) || MODES[0])[1];
   // 瀏覽器規定要使用者先點一下才能出聲
   function unlock() {
@@ -151,5 +154,5 @@
     applyMusic(); applyAmb();
   }
   if (root.addEventListener) { root.addEventListener('pointerdown', unlock, { once: true }); root.addEventListener('keydown', unlock, { once: true }); }
-  root.FS_AUDIO = { play, set, get: k => conf[k], ambience, nextMode, modeName };
+  root.FS_AUDIO = { play, set, get: k => conf[k], ambience, nextMode, modeName, setVol, vol };
 })(typeof window !== 'undefined' ? window : globalThis);
