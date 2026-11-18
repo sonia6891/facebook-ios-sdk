@@ -980,7 +980,131 @@
     return line;
   }
 
+  /* ---------- 更多人生片段：童年、市井、機遇、晚年 ---------- */
+  const newFriend = (s, age, aff) => { const sx = chance(s, .6) ? s.sex : (s.sex === 'm' ? 'f' : 'm'); return addNpc(s, { name: makeName(s, eraAt(s.year), sx), sex: sx, age: clamp(age, 5, 80), rel: 'friend', label: '友人', aff, status: ri(s, 0, 2) }); };
+  const topSkill = s => Object.keys(s.skills).sort((a, b) => s.skills[b] - s.skills[a])[0];
+  // 童年
+  E('kidFight', { title: '孩子間的事', text: s => `巷口的孩子${pick(s, ['搶了你的陀螺', '笑你衣裳破', '欺負比你小的孩子'])}。`, choices: () => [
+    { t: '打一架', hint: '贏了威風，輸了掛彩', odds: s => clamp(.4 + s.con / 250 + s.skills.wu / 60, .3, .9), fx: s => (chance(s, clamp(.4 + s.con / 250 + s.skills.wu / 60, .3, .9)) ? say(s, '你把對方按在地上，從此巷子裡沒人敢惹你。', { wu: 2, mood: 5 }) : say(s, '你被揍得鼻青臉腫，回家還挨了一頓罵。', { hp: -4, mood: -4, wu: 1 })) },
+    { t: '講道理', hint: '也許多個朋友', fx: s => { if (chance(s, .5)) { const n = newFriend(s, s.age + ri(s, -1, 2), 40); return say(s, `吵著吵著，你和${n.name}倒成了玩伴。`, { mood: 4 }); } return say(s, '對方哼了一聲走了，你也沒吃虧。', { wen: 1 }); } },
+    { t: '回家告狀', hint: '安全', fx: s => say(s, '大人出面說了幾句，事情就過去了。', { mood: -1 }) }
+  ] });
+  E('kidFind', { title: '撿到東西', text: s => `你在${pick(s, ['河邊', '牆根下', '市集散場後的地上'])}撿到${pick(s, ['一串銅錢', '一只玉墜', '一個小錢袋'])}。`, choices: () => [
+    { t: '交給失主或大人', hint: '德行', fx: s => say(s, '失主找上門來，直誇你是好孩子。', { virtue: 4, mood: 3 }) },
+    { t: '偷偷留下', hint: '多一點零花', fx: s => say(s, '你把它藏在枕頭底下，好幾天睡不安穩。', { money: 4, virtue: -3, mood: -1 }) }
+  ] });
+  E('kidPet', { title: '小東西', text: s => `一隻${pick(s, ['瘦巴巴的小黃狗', '斷了腿的小雀', '髒兮兮的小貓'])}跟著你回了家。`, choices: () => [
+    { t: '求大人讓你養', hint: '心境長年較好', fx: s => { s.flags.pet = true; return say(s, '牠從此成了你的小跟班，走到哪跟到哪。', { mood: 9, virtue: 1 }, 'major'); } },
+    { t: '餵一頓再放走', hint: '', fx: s => say(s, '你分了半個餅給牠，看牠一步三回頭地走遠。', { mood: 2, virtue: 1 }) }
+  ] });
+  E('kidStory', { title: '說書人', text: s => `街角來了個說書的，講的是${pick(s, ['古時名將', '神仙鬼怪', '才子佳人', '遊俠刺客'])}的故事，圍了一圈人。`, choices: () => [
+    { t: '蹲在前排聽到天黑', hint: '長見識', fx: s => say(s, '你聽得入了迷，連晚飯都忘了回去吃。', { wen: 2, mood: 5 }) },
+    { t: '學著講給玩伴聽', hint: '練口才', fx: s => { s.traits.charm = clamp(s.traits.charm + 3, 0, 100); return say(s, '你把故事添油加醋講了一遍，玩伴們聽得一愣一愣。', { wen: 1, mood: 4 }); } }
+  ] });
+  E('kidChore', { title: '家裡的活', text: s => `大人要你${pick(s, ['去河邊挑水', '看著灶火', '把穀子曬了', '照看弟妹'])}，可外頭的玩伴正在喊你。`, choices: () => [
+    { t: '老實把活幹完', hint: '', fx: s => say(s, '你把事情做得妥妥當當，大人難得誇了一句。', { nong: 1, virtue: 2 }) },
+    { t: '溜出去玩', hint: '開心，但可能挨罵', odds: () => .5, fx: s => (chance(s, .5) ? say(s, '你瘋玩了一下午，居然沒被發現。', { mood: 7 }) : say(s, '回家時大人拿著竹條等在門口。', { mood: -3, hp: -1 })) }
+  ] });
+  // 市井與機遇
+  E('festival', { title: s => pick(s, ['上元燈會', '端午競渡', '中秋賞月', '歲末社戲']), text: s => `${s.city}滿城熱鬧，家家戶戶都出了門。`, choices: () => [
+    { t: '全家一起去逛', hint: '花點小錢，心境大好', fx: s => { s.npcs.filter(n => n.alive && !n.gone && ['spouse', 'child', 'parent'].includes(n.rel)).forEach(n => up(n, 3)); return say(s, '人擠人、燈連燈，你們逛到半夜才回家。', { mood: 10, money: s.age >= 15 ? -3 : 0 }); } },
+    { t: '趁熱鬧擺個攤', hint: '賺點外快', req: s => s.age >= 13, why: '年紀太小', fx: s => say(s, '你賣了一晚上的小吃玩意，嗓子都喊啞了。', { money: 6 + Math.round(s.skills.shang / 8), shang: 1, hp: -1 }) },
+    { t: '在家圖個清靜', hint: '', fx: s => say(s, '外頭鑼鼓喧天，你關了門早早睡下。', { hp: 1 }) }
+  ] });
+  E('stranger', { title: '過路客', text: s => `天色已晚，一個${pick(s, ['渾身泥濘的行商', '背著書箱的讀書人', '帶傷的漢子', '抱著孩子的婦人'])}敲門，想借宿一夜。`, choices: () => [
+    { t: '留他住下', hint: '行善，也有風險', odds: () => .82, fx: s => { if (chance(s, .82)) { if (chance(s, .35)) { const n = newFriend(s, s.age + ri(s, -8, 12), 55); return say(s, `一夜長談，${n.name}臨走時說日後必當回報。`, { virtue: 4, mood: 4 }); } return say(s, '客人天沒亮就走了，桌上留了幾枚錢。', { virtue: 3, money: 3 }); } return say(s, '第二天醒來，客人不見了，家裡也少了些東西。', { money: -Math.min(12, Math.max(0, Math.round(s.money * .2))), mood: -5 }); } },
+    { t: '給些乾糧，指路去客店', hint: '穩妥', fx: s => say(s, '你塞給他兩個餅，指了指街那頭的燈火。', { virtue: 1 }) },
+    { t: '閉門不應', hint: '', fx: s => say(s, '敲門聲停了，腳步聲漸漸遠去。', { virtue: -2 }) }
+  ] });
+  E('fire', { kind: 'bad', title: '走水了', text: s => `半夜鑼聲大作，${pick(s, ['隔壁', '巷尾', '對街'])}人家起了火，火舌已經竄上屋頂。`, choices: () => [
+    { t: '衝進去救人', hint: '捨身，名聲與德行', odds: s => clamp(.5 + s.con / 300 + s.traits.nerve / 300, .4, .9), fx: s => { if (chance(s, clamp(.5 + s.con / 300 + s.traits.nerve / 300, .4, .9))) return say(s, '你背出了一個嚇傻的孩子，半條街的人都看見了。', { virtue: 8, fame: 6, hp: -3 }, 'major'); hurt(s, '救火時重傷不治'); return say(s, '一根樑木砸了下來，你被人拖出火場時已經不省人事。', { virtue: 6, hp: -ri(s, 14, 28), fame: 3 }, 'major'); } },
+    { t: '提水幫忙撲火', hint: '出一份力', fx: s => say(s, '你和街坊排成一列傳水，折騰到天亮才把火壓住。', { virtue: 3, hp: -1 }) },
+    { t: '先護住自家', hint: '', fx: s => say(s, '你把水潑在自家牆上，眼看著那邊燒成白地。', { mood: -3 }) }
+  ] });
+  E('lawsuit', { kind: 'bad', title: '無妄之災', text: s => `有人到官府告你${pick(s, ['侵占田界', '欠債不還', '毆傷他家僕人'])}，差役上門拿人問話。`, choices: () => [
+    { t: '上堂據理力爭', hint: '看口才與名聲', odds: s => clamp(.35 + s.skills.wen / 200 + s.fame / 300, .2, .9), fx: s => (chance(s, clamp(.35 + s.skills.wen / 200 + s.fame / 300, .2, .9)) ? say(s, '你條理分明，問官當堂斥退了原告。', { fame: 4, mood: 5 }) : say(s, '你百口莫辯，挨了板子還賠了錢。', { hp: -6, money: -Math.min(20, Math.max(5, Math.round(s.money * .25))), mood: -8 })) },
+    { t: '花錢打點', hint: '破財消災', req: s => s.money >= 15, why: '手頭不足 15', fx: s => say(s, '銀錢遞進去，案子就不了了之了。', { money: -15, virtue: -2 }) },
+    { t: '找有頭臉的朋友說情', hint: '需要交情好的朋友', req: s => friends(s).some(f => f.aff >= 60), why: '沒有交情夠深的朋友', fx: s => { const n = friends(s).filter(f => f.aff >= 60)[0]; up(n, -5); remember(s, n, '那場官司是我替你說的情'); return say(s, `${n.name}出面說了幾句話，原告撤了狀子。`, { mood: 2 }); } }
+  ] });
+  E('gamble', { title: '賭局', text: s => `${pick(s, ['酒肆後堂', '橋下', '客店樓上'])}開了局，有人招手叫你也來押兩把。`, choices: () => [
+    { t: '押一把大的', hint: '輸贏各半', req: s => s.money >= 20, why: '手頭不足 20', odds: () => .44, fx: s => (chance(s, .44) ? say(s, '骰子一開，滿桌的錢都推到你面前。', { money: 30, mood: 8, virtue: -1 }) : say(s, '你眼睜睜看著錢被摟走，手心全是汗。', { money: -20, mood: -7, virtue: -1 })) },
+    { t: '小玩兩把', hint: '', req: s => s.money >= 5, why: '手頭不足 5', odds: () => .48, fx: s => (chance(s, .48) ? say(s, '手氣不錯，贏了頓酒錢。', { money: 6, mood: 3 }) : say(s, '輸了幾個小錢，權當買個熱鬧。', { money: -5, mood: -1 })) },
+    { t: '搖頭走開', hint: '', fx: s => say(s, '十賭九輸，你沒有停下腳步。', { virtue: 1 }) }
+  ] });
+  E('fortune', { title: '算命先生', text: s => `路邊擺攤的瞎子拉住你的衣袖，說你${pick(s, ['印堂發亮', '命中有一劫', '今年有貴人'])}，要替你批一卦。`, choices: () => [
+    { t: '給錢聽他說', hint: '花 3', req: s => s.money >= 3, why: '手頭不足 3', fx: s => (chance(s, .5) ? say(s, '他說你晚年有福。不管真假，聽著舒坦。', { money: -3, mood: 6 }) : say(s, '他說了一堆兇險的話，害你好幾天心神不寧。', { money: -3, mood: -4 })) },
+    { t: '笑笑走開', hint: '', fx: s => say(s, '命在自己手裡，你沒有回頭。', { mood: 1 }) }
+  ] });
+  E('harvest', { title: '好年景', text: s => `今年風調雨順，${s.city}一帶糧食豐收，市面上樣樣便宜。`, choices: () => [
+    { t: '趁便宜囤些糧貨', hint: '花 15，來年可能賺', req: s => s.money >= 15, why: '手頭不足 15', odds: s => clamp(.55 + s.skills.shang / 200, .5, .9), fx: s => (chance(s, clamp(.55 + s.skills.shang / 200, .5, .9)) ? say(s, '轉年糧價回升，你出手得正是時候。', { money: 14, shang: 2 }) : say(s, '第二年又是豐收，囤的糧只好賤賣。', { money: -8, shang: 1 })) },
+    { t: '給家裡添置東西', hint: '全家高興', req: s => s.money >= 8, why: '手頭不足 8', fx: s => { s.npcs.filter(n => n.alive && !n.gone && ['spouse', 'child', 'parent'].includes(n.rel)).forEach(n => up(n, 4)); return say(s, '你扯了新布、買了肉，家裡過了個肥年。', { money: -8, mood: 8 }); } },
+    { t: '照常過日子', hint: '', fx: s => say(s, '豐年也好，荒年也罷，日子總是要過的。', { mood: 2 }) }
+  ] });
+  E('peddler', { title: '行腳商', text: s => `一個外地口音的貨郎解開包袱，裡頭是${pick(s, ['一卷殘舊的書', '一把沒見過的工具', '一包說是海外來的種子', '一方舊硯'])}，要價不菲。`, choices: () => [
+    { t: '買下來', hint: '花 18，也許是寶，也許是當', req: s => s.money >= 18, why: '手頭不足 18', odds: s => clamp(.45 + s.skills.shang / 180, .4, .9), fx: s => { const k = pick(s, ['wen', 'gong', 'nong', 'yi']); return chance(s, clamp(.45 + s.skills.shang / 180, .4, .9)) ? say(s, `東西是真的，你從中琢磨出不少${SKILLS[k]}的門道。`, { money: -18, [k]: 6, mood: 4 }) : say(s, '回家細看才知道上了當。', { money: -18, mood: -5, shang: 1 }); } },
+    { t: '殺價', hint: '看本事', odds: s => clamp(.3 + s.skills.shang / 120, .2, .9), fx: s => (chance(s, clamp(.3 + s.skills.shang / 120, .2, .9)) && s.money >= 8 ? say(s, '一番唇槍舌劍，你用不到一半的價錢買了下來。', { money: -8, shang: 2, wen: 2 }) : say(s, '貨郎把包袱一收，頭也不回地走了。', { shang: 1 })) },
+    { t: '看看就好', hint: '', fx: s => say(s, '你摸了摸，又放了回去。', null) }
+  ] });
+  E('gathering', { title: '雅集', text: s => `城裡的讀書人在${pick(s, ['水邊亭子', '寺院後園', '某家別業'])}聚會，有人遞了帖子給你。`, choices: () => [
+    { t: '當眾賦詩作文', hint: '揚名的機會', odds: s => clamp((s.skills.wen - 15) / 60, .1, .95), fx: s => (chance(s, clamp((s.skills.wen - 15) / 60, .1, .95)) ? say(s, '滿座傳抄你的句子，有人當場要與你訂交。', { fame: 7, mood: 8, wen: 1 }, 'major') : say(s, '你的文字平平，沒激起什麼水花。', { mood: -3, wen: 1 })) },
+    { t: '多聽少說，結交朋友', hint: '', fx: s => { const n = newFriend(s, s.age + ri(s, -6, 10), 45); n.kind = 'wen'; return say(s, `你認識了${n.name}，談得頗為投機。`, { wen: 1, mood: 3 }); } }
+  ] });
+  E('challenge', { title: '上門討教', text: s => `一個${pick(s, ['外鄉來的拳師', '退伍的老卒', '年輕氣盛的後生'])}聽說你有些身手，當街攔住你要比試。`, choices: () => [
+    { t: '應戰', hint: '贏了揚名', odds: s => clamp((s.skills.wu - 10) / 70, .1, .92), fx: s => (chance(s, clamp((s.skills.wu - 10) / 70, .1, .92)) ? say(s, '三招兩式，你把他放倒在地，圍觀的人轟然叫好。', { fame: 6, wu: 2, mood: 6 }) : say(s, '你被一拳打翻，養了好些天才下得了床。', { hp: -7, fame: -2, wu: 2 })) },
+    { t: '拱手認輸', hint: '不傷和氣', fx: s => say(s, '你笑說自愧不如，請他喝了碗酒。', { virtue: 1, mood: -1 }) }
+  ] });
+  E('apprentice', { title: '求師', text: s => `一個半大孩子在你門前跪了一上午，說想跟你學${SKILLS[topSkill(s)]}。`, choices: () => [
+    { t: '收下這個徒弟', hint: '多一個親近的人，名聲漸起', fx: s => { const sx = chance(s, .7) ? 'm' : 'f'; const n = addNpc(s, { name: makeName(s, eraAt(s.year), sx), sex: sx, age: ri(s, 12, 16), rel: 'friend', label: '徒弟', aff: 60, status: 1 }); remember(s, n, '你肯收下當年那個跪在門口的孩子'); return say(s, `你收${n.name}為徒，把本事一點點教給他。`, { fame: 4, mood: 6, virtue: 2 }, 'major'); } },
+    { t: '指點幾句，打發他走', hint: '', fx: s => say(s, '你教了他幾手入門的功夫，讓他另投名師。', { virtue: 1 }) }
+  ] });
+  E('dream', { title: '奇夢', text: s => `你夢見${pick(s, ['過世的親人站在堂前', '自己站在高山之巔', '一條大河倒流', '滿屋子都是書'])}，醒來時天還沒亮。`, choices: () => [
+    { t: '認定是個好兆頭', hint: '', fx: s => say(s, '你覺得是上天有所指點，做事格外有勁。', { mood: 6 }) },
+    { t: '反覆琢磨', hint: '', fx: s => say(s, '你想了好幾天，越想越睡不著。', { mood: -2, wen: 2 }) },
+    { t: '不過是個夢', hint: '', fx: s => say(s, '你翻了個身，又睡著了。', { hp: 1 }) }
+  ] });
+  E('epidemicHelp', { kind: 'bad', title: '鄰里染疫', text: s => `街坊裡有幾戶人家${pick(s, ['上吐下瀉', '高燒不退', '身上起了紅疹'])}，人人自危。`, choices: () => [
+    { t: '上門診治', hint: '需醫術 25；救人也冒險', req: s => s.skills.yi >= 25, why: '醫術還不到 25', odds: s => clamp(.5 + s.skills.yi / 180, .5, .95), fx: s => { if (chance(s, clamp(.5 + s.skills.yi / 180, .5, .95))) return say(s, '你開方施藥，幾戶人家都轉危為安。', { virtue: 8, fame: 6, yi: 2 }, 'major'); hurt(s, '救治疫病時染疫而亡'); return say(s, '病人是救回來了，你自己卻也倒下了。', { virtue: 6, hp: -ri(s, 10, 22), yi: 2 }); } },
+    { t: '送些米糧到門口', hint: '花 6', req: s => s.money >= 6, why: '手頭不足 6', fx: s => say(s, '你把東西放在門檻外，隔著門喊了一聲。', { money: -6, virtue: 4 }) },
+    { t: '緊閉門戶', hint: '', fx: s => say(s, '你們一家躲了一個月，總算平安。', { mood: -2 }) }
+  ] });
+  // 晚年
+  E('reminisce', { title: '憶往', text: s => `${pick(s, ['翻箱子時', '曬太陽時', '夜裡睡不著時'])}，你想起了年輕時的許多事。`, choices: () => [
+    { t: '說給兒孫聽', hint: '需有子女在世', req: s => children(s, true).length > 0, why: '膝下無人', fx: s => { children(s, true).forEach(c => { up(c, 5); c.edu = clamp((c.edu || 0) + 2, 0, 100); }); return say(s, '孩子們圍著你，聽得忘了時辰。', { mood: 9 }); } },
+    { t: '提筆記下來', hint: '需文墨 20', req: s => s.skills.wen >= 20, why: '文墨還不到 20', fx: s => say(s, '你斷斷續續寫了幾十頁，自己看著也覺得有味道。', { wen: 2, mood: 5, fame: 1 }) },
+    { t: '一個人靜靜想', hint: '', fx: s => say(s, '有些事，只適合自己記得。', { mood: 3 }) }
+  ] });
+  E('passOn', { kind: 'family', title: '傾囊相授', text: (s, c) => `你自覺來日無多，想把一身${SKILLS[topSkill(s)]}的本事傳給${npc(s, c.id).name}。`, choices: (s, c) => [
+    { t: '手把手教到會為止', hint: '費神，但本事有了傳人', fx: st => { const k = npc(st, c.id); k.edu = clamp((k.edu || 0) + 14, 0, 100); k.gift = topSkill(st); up(k, 12); st.flags.passed = true; remember(st, k, '那年冬天，你把一身本事都教給了我'); return say(st, `${k.name}學得認真，你心裡的一塊石頭落了地。`, { mood: 12, hp: -2, virtue: 2 }, 'major'); } },
+    { t: '寫成口訣留下', hint: '需文墨 20', req: st => st.skills.wen >= 20, why: '文墨還不到 20', fx: st => { const k = npc(st, c.id); k.edu = clamp((k.edu || 0) + 7, 0, 100); st.flags.passed = true; return say(st, '你把要訣一條條寫下，封在匣子裡交給了他。', { mood: 6, wen: 1 }); } },
+    { t: '各人有各人的造化', hint: '', fx: st => { st.flags.passed = true; return say(st, '你擺擺手，說這些東西不學也罷。', { mood: 1 }); } }
+  ] });
+  E('newSchool', { title: '新式學堂', text: s => `${s.city}開了新式學堂，教的是${pick(s, ['算學與格致', '外國文與地理', '體操與博物'])}，街坊議論紛紛。`, choices: () => [
+    { t: '報名去讀', hint: '眼界大開', fx: s => { s.schooled = true; return say(s, '你第一次看見地球儀，才知道天下這樣大。', { wen: 5, gong: 2, mood: 5 }, 'major'); } },
+    { t: '還是老法子穩當', hint: '', fx: s => say(s, '你搖搖頭，繼續走原來的路。', { mood: 1 }) }
+  ] });
+
   const LIFE = [
+    { id: 'kidFight', w: 1.2, cond: s => s.age >= 5 && s.age <= 12 },
+    { id: 'kidFind', w: 1, cond: s => s.age >= 5 && s.age <= 13 },
+    { id: 'kidPet', w: .9, cond: s => s.age >= 5 && s.age <= 12 && !s.flags.pet },
+    { id: 'kidStory', w: 1.1, cond: s => s.age >= 5 && s.age <= 13 },
+    { id: 'kidChore', w: 1.1, cond: s => s.age >= 6 && s.age <= 13 },
+    { id: 'festival', w: .55, cond: s => s.age >= 5 },
+    { id: 'stranger', w: .7, cond: s => s.age >= 16 },
+    { id: 'fire', w: .45, cond: s => s.age >= 14 },
+    { id: 'lawsuit', w: .5, cond: s => s.age >= 20 && s.year < 1912 },
+    { id: 'gamble', w: .6, cond: s => s.age >= 16 && s.money >= 5 },
+    { id: 'fortune', w: .6, cond: s => s.age >= 12 },
+    { id: 'harvest', w: .7, cond: s => s.age >= 15 && s.world.stable >= 45 },
+    { id: 'peddler', w: .7, cond: s => s.age >= 14 },
+    { id: 'gathering', w: .8, cond: s => s.age >= 16 && s.skills.wen >= 20 },
+    { id: 'challenge', w: .8, cond: s => s.age >= 15 && s.age <= 60 && s.skills.wu >= 20 },
+    { id: 'apprentice', w: .7, cond: s => s.age >= 35 && bestSkill(s) >= 45 && !s.npcs.some(n => n.label === '徒弟' && n.alive) },
+    { id: 'dream', w: .5, cond: s => s.age >= 10 },
+    { id: 'epidemicHelp', w: .5, cond: s => s.age >= 16 },
+    { id: 'reminisce', w: 1, cond: s => s.age >= 55 },
+    { id: 'passOn', w: 1.4, cond: s => s.age >= 55 && !s.flags.passed && bestSkill(s) >= 35 && children(s, true).some(c => c.age >= 12) },
+    { id: 'newSchool', w: 1.5, cond: s => s.year >= 1898 && s.age >= 8 && s.age <= 22 && !s.flags.newSchool },
     { id: 'spouseQuarrel', w: .7, cond: s => !!spouse(s) },
     { id: 'spouseDream', w: .7, cond: s => !!spouse(s) && s.age >= 22 && s.age <= 58 },
     { id: 'childTalent', w: 1.1, cond: s => children(s, true).some(c => c.age >= 8 && c.age <= 14 && !c.gift) },
@@ -1077,6 +1201,8 @@
     { t: '遠走他鄉', hint: '放棄一切', fx: s => { s.job = null; s.disguise = false; s.flags.entered = false; return say(s, '你連夜離開，把過往的身分都留在了身後。', { money: -5, mood: -12 }, 'major'); } }
   ] });
   function ctxFor(s, id) {
+    if (id === 'passOn') return { id: pick(s, children(s, true).filter(c => c.age >= 12)).id };
+    if (id === 'newSchool') { s.flags.newSchool = true; return {}; }
     if (id === 'spouseQuarrel' || id === 'spouseDream') return { id: spouse(s).id };
     if (id === 'childTalent') return { id: pick(s, children(s, true).filter(c => c.age >= 8 && c.age <= 14 && !c.gift)).id, k: pick(s, ['wen', 'wu', 'gong', 'shang']) };
     if (id === 'childMarriage') return { id: pick(s, children(s, true).filter(c => c.age >= 17 && c.age <= 30 && !c.married)).id };
@@ -1178,6 +1304,7 @@
     milestones(s);
     perkYear(s);
     ambitionYear(s);
+    if (s.flags.pet && s.age < 30) s.mood = clamp(s.mood + 1, 0, 100);
     worldNews(s);
     rollEvents(s);
     afterChange(s);
@@ -1355,7 +1482,7 @@
       s.log.push({ y: s.year, age: s.age, t: `這一年發生了「${HISTORY[idx].title}」，你還太小，只記得大人們驚慌的神色。`, k: 'hist' });
     }
     if (reach) { s.seen.push(idx); pushEvent(s, 'history', { h: idx }); }
-    if (s.age < 8) return;
+    if (s.age < 5) return;
     const already = s.pending.length;
     if (already < 2 && chance(s, .62)) {
       const pool = LIFE.filter(l => l.cond(s));

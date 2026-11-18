@@ -1,7 +1,7 @@
 {
   "name": "fusheng-millennia",
   "productName": "浮生千年",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "浮生千年：中華歷史人生養成（Windows 桌面版）",
   "main": "main.js",
   "private": true,
